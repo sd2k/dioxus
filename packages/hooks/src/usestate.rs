@@ -6,7 +6,6 @@ use std::{
     fmt::{Debug, Display},
     ops::{Add, Div, Mul, Not, Sub},
     rc::Rc,
-    sync::Arc,
 };
 
 /// Store state between component renders.
@@ -36,31 +35,12 @@ pub fn use_state<'a, T: 'static>(
 ) -> &'a UseState<T> {
     let hook = cx.use_hook(move |_| {
         let current_val = Rc::new(initial_state_fn());
-        let update_callback = cx.schedule_update();
         let slot = Rc::new(RefCell::new(current_val.clone()));
-        let setter = Rc::new({
-            dioxus_core::to_owned![update_callback, slot];
-            move |new| {
-                {
-                    let mut slot = slot.borrow_mut();
-
-                    // if there's only one reference (weak or otherwise), we can just swap the values
-                    // Typically happens when the state is set multiple times - we don't want to create a new Rc for each new value
-                    if let Some(val) = Rc::get_mut(&mut slot) {
-                        *val = new;
-                    } else {
-                        *slot = Rc::new(new);
-                    }
-                }
-                update_callback();
-            }
-        });
 
         UseState {
             current_val,
-            update_callback,
-            setter,
             slot,
+            cx,
         }
     });
 
@@ -71,15 +51,42 @@ pub fn use_state<'a, T: 'static>(
 
 pub struct UseState<T: 'static> {
     pub(crate) current_val: Rc<T>,
-    pub(crate) update_callback: Arc<dyn Fn()>,
-    pub(crate) setter: Rc<dyn Fn(T)>,
     pub(crate) slot: Rc<RefCell<Rc<T>>>,
+    pub(crate) cx: *const ScopeState,
 }
 
 impl<T: 'static> UseState<T> {
     /// Set the state to a new value.
     pub fn set(&self, new: T) {
-        (self.setter)(new);
+        let mut slot = self.slot.borrow_mut();
+
+        // if there's only one reference (weak or otherwise), we can just swap the values
+        // Typically happens when the state is set multiple times - we don't want to create a new Rc for each new value
+        if let Some(val) = Rc::get_mut(&mut slot) {
+            *val = new;
+        } else {
+            *slot = Rc::new(new);
+        }
+
+        self.needs_update();
+    }
+
+    pub fn set_async(&self, new: impl std::future::Future<Output = T> + 'static) {
+        let cx = unsafe { &*self.cx };
+        let slot = self.slot.clone();
+
+        cx.spawn(async move {
+            let new = new.await;
+            let mut slot = slot.borrow_mut();
+
+            if let Some(val) = Rc::get_mut(&mut slot) {
+                *val = new;
+            } else {
+                *slot = Rc::new(new);
+            }
+
+            cx.needs_update();
+        });
     }
 
     /// Get the current value of the state by cloning its container Rc.
@@ -104,33 +111,6 @@ impl<T: 'static> UseState<T> {
     #[must_use]
     pub fn current(&self) -> Rc<T> {
         self.slot.borrow().clone()
-    }
-
-    /// Get the `setter` function directly without the `UseState` wrapper.
-    ///
-    /// This is useful for passing the setter function to other components.
-    ///
-    /// However, for most cases, calling `to_owned` o`UseState`te is the
-    /// preferred way to get "anoth`set_state`tate handle.
-    ///
-    ///
-    /// # Examples
-    /// A component might require an `Rc<dyn Fn(T)>` as an input to set a value.
-    ///
-    /// ```rust, ignore
-    /// fn component(cx: Scope) -> Element {
-    ///     let value = use_state(&cx, || 0);
-    ///
-    ///     rsx!{
-    ///         Component {
-    ///             handler: value.setter()
-    ///         }
-    ///     }
-    /// }
-    /// ```
-    #[must_use]
-    pub fn setter(&self) -> Rc<dyn Fn(T)> {
-        self.setter.clone()
     }
 
     /// Set the state to a new value, using the current state value as a reference.
@@ -165,7 +145,7 @@ impl<T: 'static> UseState<T> {
             let current = self.slot.borrow();
             f(current.as_ref())
         };
-        (self.setter)(new_val);
+        self.set(new_val);
     }
 
     /// Get the value of the state when this handle was created.
@@ -218,7 +198,15 @@ impl<T: 'static> UseState<T> {
     /// }
     /// ```
     pub fn needs_update(&self) {
-        (self.update_callback)();
+        self.cx().needs_update();
+    }
+
+    #[inline]
+    fn cx(&self) -> &ScopeState {
+        // safety
+        // scope ptrs are always valid
+        // they might not always point to the *right* scope, but, uh, that's fine
+        unsafe { &*self.cx }
     }
 }
 
@@ -297,9 +285,8 @@ impl<T: 'static> Clone for UseState<T> {
     fn clone(&self) -> Self {
         UseState {
             current_val: self.current_val.clone(),
-            update_callback: self.update_callback.clone(),
-            setter: self.setter.clone(),
             slot: self.slot.clone(),
+            cx: self.cx,
         }
     }
 }

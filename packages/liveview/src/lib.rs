@@ -5,11 +5,11 @@ pub mod adapters {
     #[cfg(feature = "warp")]
     pub mod warp_adapter;
 
-    #[cfg(feature = "axum")]
-    pub mod axum_adapter;
+    // #[cfg(feature = "axum")]
+    // pub mod axum_adapter;
 
-    #[cfg(feature = "actix")]
-    pub mod actix_adapter;
+    // #[cfg(feature = "actix")]
+    // pub mod actix_adapter;
 }
 
 use std::net::SocketAddr;
@@ -17,11 +17,11 @@ use std::net::SocketAddr;
 #[cfg(feature = "warp")]
 pub use adapters::warp_adapter::connect;
 
-#[cfg(feature = "axum")]
-pub use adapters::axum_adapter::connect;
+// #[cfg(feature = "axum")]
+// pub use adapters::axum_adapter::connect;
 
-#[cfg(feature = "actix")]
-pub use adapters::actix_adapter::connect;
+// #[cfg(feature = "actix")]
+// pub use adapters::actix_adapter::connect;
 use tokio_util::task::LocalPoolHandle;
 
 #[derive(Clone)]

@@ -266,8 +266,6 @@ impl ScopeArena {
         // todo: we *know* that this is aliased by the contents of the scope itself
         let scope = unsafe { &mut *self.get_scope_raw(id).expect("could not find scope") };
 
-        log::trace!("running scope {:?} symbol: {:?}", id, scope.fnptr);
-
         // Safety:
         // - We dropped the listeners, so no more &mut T can be used while these are held
         // - All children nodes that rely on &mut T are replaced with a new reference
@@ -321,18 +319,15 @@ impl ScopeArena {
         let nodes = self.nodes.borrow();
         let mut cur_el = Some(element);
 
-        log::trace!("calling listener {:?}, {:?}", event, element);
         let state = Rc::new(BubbleState::new());
 
         while let Some(id) = cur_el.take() {
             if let Some(el) = nodes.get(id.0) {
                 let real_el = unsafe { &**el };
-                log::trace!("looking for listener on {:?}", real_el);
 
                 if let VNode::Element(real_el) = real_el {
                     for listener in real_el.listeners.borrow().iter() {
                         if listener.event == event.name {
-                            log::trace!("calling listener {:?}", listener.event);
                             if state.canceled.get() {
                                 // stop bubbling if canceled
                                 break;

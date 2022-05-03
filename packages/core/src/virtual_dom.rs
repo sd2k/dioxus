@@ -8,7 +8,7 @@ use futures_channel::mpsc::{UnboundedReceiver, UnboundedSender};
 use futures_util::{future::poll_fn, StreamExt};
 use fxhash::FxHashSet;
 use indexmap::IndexSet;
-use std::{collections::VecDeque, iter::FromIterator, task::Poll};
+use std::{collections::VecDeque, iter::FromIterator, sync::Arc, task::Poll};
 
 /// A virtual node system that progresses user events and diffs UI trees.
 ///
@@ -103,7 +103,7 @@ use std::{collections::VecDeque, iter::FromIterator, task::Poll};
 /// }
 /// ```
 pub struct VirtualDom {
-    scopes: ScopeArena,
+    scheduler: Arc<ScopeArena>,
 
     pending_messages: VecDeque<SchedulerMsg>,
     dirty_scopes: IndexSet<ScopeId>,
@@ -228,7 +228,7 @@ impl VirtualDom {
         );
 
         Self {
-            scopes,
+            scheduler: Arc::new(scopes),
             channel,
             dirty_scopes: IndexSet::from_iter([ScopeId(0)]),
             pending_messages: VecDeque::new(),
@@ -261,7 +261,7 @@ impl VirtualDom {
     ///
     ///
     pub fn get_scope(&self, id: ScopeId) -> Option<&ScopeState> {
-        self.scopes.get_scope(id)
+        self.scheduler.get_scope(id)
     }
 
     /// Get an [`UnboundedSender`] handle to the channel used by the scheduler.
@@ -278,7 +278,7 @@ impl VirtualDom {
 
     /// Try to get an element from its ElementId
     pub fn get_element(&self, id: ElementId) -> Option<&VNode> {
-        self.scopes.get_element(id)
+        self.scheduler.get_element(id)
     }
 
     /// Add a new message to the scheduler queue directly.
@@ -332,10 +332,10 @@ impl VirtualDom {
             }
 
             if self.pending_messages.is_empty() {
-                if self.scopes.tasks.has_tasks() {
+                if self.scheduler.tasks.has_tasks() {
                     use futures_util::future::{select, Either};
 
-                    let scopes = &mut self.scopes;
+                    let scopes = &mut self.scheduler;
                     let task_poll = poll_fn(|cx| {
                         //
                         let mut any_pending = false;
@@ -401,7 +401,7 @@ impl VirtualDom {
             }
             SchedulerMsg::Event(event) => {
                 if let Some(element) = event.element {
-                    self.scopes.call_listener_with_bubbling(event, element);
+                    self.scheduler.call_listener_with_bubbling(event, element);
                 }
             }
             SchedulerMsg::Immediate(s) => {
@@ -460,7 +460,7 @@ impl VirtualDom {
         let mut committed_mutations = vec![];
 
         while !self.dirty_scopes.is_empty() {
-            let scopes = &self.scopes;
+            let scopes = &self.scheduler;
             let mut diff_state = DiffState::new(scopes);
 
             let mut ran_scopes = FxHashSet::default();
@@ -481,7 +481,7 @@ impl VirtualDom {
                 if !ran_scopes.contains(&scopeid) {
                     ran_scopes.insert(scopeid);
 
-                    self.scopes.run_scope(scopeid);
+                    self.scheduler.run_scope(scopeid);
 
                     diff_state.diff_scope(scopeid);
 
@@ -537,14 +537,14 @@ impl VirtualDom {
     /// ```
     pub fn rebuild(&mut self) -> Mutations {
         let scope_id = ScopeId(0);
-        let mut diff_state = DiffState::new(&self.scopes);
+        let mut diff_state = DiffState::new(&self.scheduler);
 
-        self.scopes.run_scope(scope_id);
+        self.scheduler.run_scope(scope_id);
 
         diff_state.element_stack.push(ElementId(0));
         diff_state.scope_stack.push(scope_id);
 
-        let node = self.scopes.fin_head(scope_id);
+        let node = self.scheduler.fin_head(scope_id);
         let created = diff_state.create_node(node);
 
         diff_state.mutations.append_children(created as u32);
@@ -586,8 +586,8 @@ impl VirtualDom {
     /// let edits = dom.diff();
     /// ```
     pub fn hard_diff(&mut self, scope_id: ScopeId) -> Mutations {
-        let mut diff_machine = DiffState::new(&self.scopes);
-        self.scopes.run_scope(scope_id);
+        let mut diff_machine = DiffState::new(&self.scheduler);
+        self.scheduler.run_scope(scope_id);
 
         let (old, new) = (
             diff_machine.scopes.wip_head(scope_id),
@@ -617,7 +617,7 @@ impl VirtualDom {
     /// let nodes = dom.render_nodes(rsx!("div"));
     /// ```
     pub fn render_vnodes<'a>(&'a self, lazy_nodes: LazyNodes<'a, '_>) -> &'a VNode<'a> {
-        let scope = self.scopes.get_scope(ScopeId(0)).unwrap();
+        let scope = self.scheduler.get_scope(ScopeId(0)).unwrap();
         let frame = scope.wip_frame();
         let factory = NodeFactory::new(scope);
         let node = lazy_nodes.call(factory);
@@ -637,7 +637,7 @@ impl VirtualDom {
     /// let nodes = dom.render_nodes(rsx!("div"));
     /// ```
     pub fn diff_vnodes<'a>(&'a self, old: &'a VNode<'a>, new: &'a VNode<'a>) -> Mutations<'a> {
-        let mut machine = DiffState::new(&self.scopes);
+        let mut machine = DiffState::new(&self.scheduler);
         machine.element_stack.push(ElementId(0));
         machine.scope_stack.push(ScopeId(0));
         machine.diff_node(old, new);
@@ -659,7 +659,7 @@ impl VirtualDom {
     /// let nodes = dom.render_nodes(rsx!("div"));
     /// ```
     pub fn create_vnodes<'a>(&'a self, nodes: LazyNodes<'a, '_>) -> Mutations<'a> {
-        let mut machine = DiffState::new(&self.scopes);
+        let mut machine = DiffState::new(&self.scheduler);
         machine.scope_stack.push(ScopeId(0));
         machine.element_stack.push(ElementId(0));
         let node = self.render_vnodes(nodes);
@@ -688,13 +688,13 @@ impl VirtualDom {
     ) -> (Mutations<'a>, Mutations<'a>) {
         let (old, new) = (self.render_vnodes(left), self.render_vnodes(right));
 
-        let mut create = DiffState::new(&self.scopes);
+        let mut create = DiffState::new(&self.scheduler);
         create.scope_stack.push(ScopeId(0));
         create.element_stack.push(ElementId(0));
         let created = create.create_node(old);
         create.mutations.append_children(created as u32);
 
-        let mut edit = DiffState::new(&self.scopes);
+        let mut edit = DiffState::new(&self.scheduler);
         edit.scope_stack.push(ScopeId(0));
         edit.element_stack.push(ElementId(0));
         edit.diff_node(old, new);
@@ -730,27 +730,27 @@ impl Drop for VirtualDom {
     fn drop(&mut self) {
         // the best way to drop the dom is to replace the root scope with a dud
         // the diff infrastructure will then finish the rest
-        let scope = self.scopes.get_scope(ScopeId(0)).unwrap();
+        let scope = self.scheduler.get_scope(ScopeId(0)).unwrap();
 
         // todo: move the remove nodes method onto scopearena
         // this will clear *all* scopes *except* the root scope
-        let mut machine = DiffState::new(&self.scopes);
+        let mut machine = DiffState::new(&self.scheduler);
         machine.remove_nodes([scope.root_node()], false);
 
         // Now, clean up the root scope
         // safety: there are no more references to the root scope
-        let scope = unsafe { &mut *self.scopes.get_scope_raw(ScopeId(0)).unwrap() };
+        let scope = unsafe { &mut *self.scheduler.get_scope_raw(ScopeId(0)).unwrap() };
         scope.reset();
 
         // make sure there are no "live" components
-        for (_, scopeptr) in self.scopes.scopes.get_mut().drain() {
+        for (_, scopeptr) in self.scheduler.scopes.borrow_mut().drain() {
             // safety: all scopes were made in the bump's allocator
             // They are never dropped until now. The only way to drop is through Box.
             let scope = unsafe { bumpalo::boxed::Box::from_raw(scopeptr) };
             drop(scope);
         }
 
-        for scopeptr in self.scopes.free_scopes.get_mut().drain(..) {
+        for scopeptr in self.scheduler.free_scopes.borrow_mut().drain(..) {
             // safety: all scopes were made in the bump's allocator
             // They are never dropped until now. The only way to drop is through Box.
             let mut scope = unsafe { bumpalo::boxed::Box::from_raw(scopeptr) };

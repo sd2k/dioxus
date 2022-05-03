@@ -181,12 +181,6 @@ fn app(cx: Scope) -> Element {
             // Can take children too!
             Taller { a: "asd", div {"hello world!"} }
 
-            // Components can be used with the `call` syntax
-            // This component's props are defined *inline* with the `inline_props` macro
-            with_inline(
-                text: "using functionc all syntax"
-            )
-
             // helper functions
             // Single values must be wrapped in braces or `Some` to satisfy `IntoIterator`
             [helper(&cx, "hello world!")]
