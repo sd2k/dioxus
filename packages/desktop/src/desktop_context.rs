@@ -309,7 +309,7 @@ impl DesktopController {
 }
 
 /// Get a closure that executes any JavaScript in the WebView context.
-pub fn use_eval<S: std::string::ToString>(cx: &ScopeState) -> &dyn Fn(S) -> EvalResult {
+pub fn use_eval(cx: &ScopeState) -> &dyn Fn(String) -> EvalResult {
     let desktop = use_window(cx).clone();
     cx.use_hook(|| {
         move |script| {
@@ -317,7 +317,7 @@ pub fn use_eval<S: std::string::ToString>(cx: &ScopeState) -> &dyn Fn(S) -> Eval
             let recv = desktop.eval_reciever.clone();
             EvalResult { reciever: recv }
         }
-    })
+    }) as &dyn Fn(String) -> EvalResult
 }
 
 /// A future that resolves to the result of a JavaScript evaluation.

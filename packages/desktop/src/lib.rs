@@ -191,7 +191,9 @@ fn build_webview(
                         eval_sender.send(result).unwrap();
                     }
                     "user_event" => {
+                        dbg!(&message);
                         if let Ok(evt) = serde_json::from_value(message.params()) {
+                            dbg!(&evt);
                             _ = event_tx.unbounded_send(evt);
                         }
                     }

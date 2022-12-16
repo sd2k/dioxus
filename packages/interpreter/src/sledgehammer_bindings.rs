@@ -175,10 +175,10 @@ mod js {
     fn create_placeholder(id: u32) {
         "{node = document.createElement('pre'); node.hidden = true; stack.push(node); nodes[$id$] = node;}"
     }
-    fn new_event_listener(event_name: &str<u8, evt>, id: u32, bubbles: u8) {
+    fn new_event_listener(event_name: &str<u8, evt>, id: u32) {
         r#"node = nodes[id]; if(node.listening){node.listening += 1;}else{node.listening = 1;} node.setAttribute('data-dioxus-id', `\${id}`); listeners.create($event_name$, node, $bubbles$);"#
     }
-    fn remove_event_listener(event_name: &str<u8, evt>, id: u32, bubbles: u8) {
+    fn remove_event_listener(event_name: &str<u8, evt>, id: u32) {
         "{node = nodes[$id$]; node.listening -= 1; node.removeAttribute('data-dioxus-id'); listeners.remove(node, $event_name$, $bubbles$);}"
     }
     fn set_text(id: u32, text: &str) {

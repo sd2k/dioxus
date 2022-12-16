@@ -104,7 +104,8 @@ where
                 match evt {
                     Some(Ok(evt)) => {
                         if let Ok(IpcMessage { params }) = serde_json::from_str::<IpcMessage>(&evt) {
-                            vdom.handle_event(&params.name, params.data.into_any(), params.element, params.bubbles);
+                            let (name, data, element, bubbles) = params.into_parts();
+                            vdom.handle_event(name, data, element, bubbles);
                         }
                     }
                     // log this I guess? when would we get an error here?

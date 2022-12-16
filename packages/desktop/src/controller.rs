@@ -70,7 +70,11 @@ impl DesktopController {
                     tokio::select! {
                         _ = dom.wait_for_work() => {}
                         Some(value) = event_rx.next() => {
-                            dom.handle_event(&value.name,  value.data.into_any(), value.element,  dioxus_html::events::event_bubbles(&value.name));
+                            let name = value.data.name();
+                            let bubbles = value.data.bubbles();
+                            let element = value.element;
+                            let data = value.data.into_any();
+                            dom.handle_event(name,  data, element,  bubbles);
                         }
                     }
 
@@ -78,7 +82,10 @@ impl DesktopController {
                         .render_with_deadline(tokio::time::sleep(Duration::from_millis(16)))
                         .await;
 
-                    edit_queue.lock().unwrap().push(serde_json::to_string(&muts).unwrap());
+                    edit_queue
+                        .lock()
+                        .unwrap()
+                        .push(serde_json::to_string(&muts).unwrap());
                     let _ = proxy.send_event(UserWindowEvent::EditsReady);
                 }
             })

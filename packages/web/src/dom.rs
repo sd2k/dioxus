@@ -8,7 +8,7 @@
 //! - Partial delegation?>
 
 use dioxus_core::{ElementId, Mutation, Template, TemplateAttribute, TemplateNode};
-use dioxus_html::{event_bubbles, CompositionData, FormData};
+use dioxus_html::{CompositionData, EventData, FormData, HtmlEvent};
 use dioxus_interpreter_js::{save_template, Channel};
 use futures_channel::mpsc;
 use rustc_hash::FxHashMap;
@@ -25,16 +25,8 @@ pub struct WebsysDom {
     interpreter: Channel,
 }
 
-pub struct UiEvent {
-    pub name: String,
-    pub bubbles: bool,
-    pub element: ElementId,
-    pub data: Rc<dyn Any>,
-    pub event: Event,
-}
-
 impl WebsysDom {
-    pub fn new(cfg: Config, event_channel: mpsc::UnboundedSender<UiEvent>) -> Self {
+    pub fn new(cfg: Config, event_channel: mpsc::UnboundedSender<HtmlEvent>) -> Self {
         // eventually, we just want to let the interpreter do all the work of decoding events into our event type
         // a match here in order to avoid some error during runtime browser test
         let document = load_document();
@@ -48,7 +40,6 @@ impl WebsysDom {
             Closure::wrap(Box::new(move |event: &web_sys::Event| {
                 let name = event.type_();
                 let element = walk_event_for_id(event);
-                let bubbles = dioxus_html::event_bubbles(name.as_str());
                 if let Some((element, target)) = element {
                     if target
                         .get_attribute("dioxus-prevent-default")
@@ -60,13 +51,7 @@ impl WebsysDom {
                     }
 
                     let data = virtual_event_from_websys_event(event.clone(), target);
-                    let _ = event_channel.unbounded_send(UiEvent {
-                        name,
-                        bubbles,
-                        element,
-                        data,
-                        event: event.clone(),
-                    });
+                    let _ = event_channel.unbounded_send(HtmlEvent { element, data });
                 }
             }));
 
@@ -182,12 +167,8 @@ impl WebsysDom {
                     i.set_attribute(id.0 as u32, name, if *value { "true" } else { "false" }, "")
                 }
                 SetText { value, id } => i.set_text(id.0 as u32, value),
-                NewEventListener { name, id, .. } => {
-                    i.new_event_listener(name, id.0 as u32, event_bubbles(&name[2..]) as u8);
-                }
-                RemoveEventListener { name, id } => {
-                    i.remove_event_listener(name, id.0 as u32, event_bubbles(&name[2..]) as u8)
-                }
+                NewEventListener { name, id, .. } => i.new_event_listener(name, id.0 as u32),
+                RemoveEventListener { name, id } => i.remove_event_listener(name, id.0 as u32),
                 Remove { id } => i.remove(id.0 as u32),
                 PushRoot { id } => i.push_root(id.0 as u32),
             }
@@ -199,52 +180,119 @@ impl WebsysDom {
 
 // todo: some of these events are being casted to the wrong event type.
 // We need tests that simulate clicks/etc and make sure every event type works.
-pub fn virtual_event_from_websys_event(event: web_sys::Event, target: Element) -> Rc<dyn Any> {
+pub fn virtual_event_from_websys_event(event: web_sys::Event, target: Element) -> EventData {
     use dioxus_html::events::*;
+    use EventData::*;
 
     match event.type_().as_str() {
-        "copy" | "cut" | "paste" => Rc::new(ClipboardData {}),
-        "compositionend" | "compositionstart" | "compositionupdate" => {
-            make_composition_event(&event)
-        }
-        "keydown" | "keypress" | "keyup" => Rc::new(KeyboardData::from(event)),
-        "focus" | "blur" | "focusout" | "focusin" => Rc::new(FocusData {}),
+        "copy" => copy(ClipboardData {}),
+        "cut" => cut(ClipboardData {}),
+        "paste" => paste(ClipboardData {}),
 
-        "change" | "input" | "invalid" | "reset" | "submit" => read_input_to_data(target),
+        "compositionend" => compositionend(make_composition_event(&event)),
+        "compositionstart" => compositionstart(make_composition_event(&event)),
+        "compositionupdate" => compositionupdate(make_composition_event(&event)),
 
-        "click" | "contextmenu" | "dblclick" | "doubleclick" | "drag" | "dragend" | "dragenter"
-        | "dragexit" | "dragleave" | "dragover" | "dragstart" | "drop" | "mousedown"
-        | "mouseenter" | "mouseleave" | "mousemove" | "mouseout" | "mouseover" | "mouseup" => {
-            Rc::new(MouseData::from(event))
-        }
-        "pointerdown" | "pointermove" | "pointerup" | "pointercancel" | "gotpointercapture"
-        | "lostpointercapture" | "pointerenter" | "pointerleave" | "pointerover" | "pointerout" => {
-            Rc::new(PointerData::from(event))
-        }
-        "select" => Rc::new(SelectionData {}),
-        "touchcancel" | "touchend" | "touchmove" | "touchstart" => Rc::new(TouchData::from(event)),
+        "keydown" => keydown(KeyboardData::from(event)),
+        "keypress" => keypress(KeyboardData::from(event)),
+        "keyup" => keyup(KeyboardData::from(event)),
 
-        "scroll" => Rc::new(()),
-        "wheel" => Rc::new(WheelData::from(event)),
-        "animationstart" | "animationend" | "animationiteration" => {
-            Rc::new(AnimationData::from(event))
-        }
-        "transitionend" => Rc::new(TransitionData::from(event)),
-        "abort" | "canplay" | "canplaythrough" | "durationchange" | "emptied" | "encrypted"
-        | "ended" | "error" | "loadeddata" | "loadedmetadata" | "loadstart" | "pause" | "play"
-        | "playing" | "progress" | "ratechange" | "seeked" | "seeking" | "stalled" | "suspend"
-        | "timeupdate" | "volumechange" | "waiting" => Rc::new(MediaData {}),
-        "toggle" => Rc::new(ToggleData {}),
+        "focus" => focus(FocusData {}),
+        "blur" => blur(FocusData {}),
+        "focusout" => focusout(FocusData {}),
+        "focusin" => focusin(FocusData {}),
 
-        _ => Rc::new(()),
+        "change" => change(read_input_to_data(target)),
+        "input" => input(read_input_to_data(target)),
+        "invalid" => invalid(read_input_to_data(target)),
+        "reset" => reset(read_input_to_data(target)),
+        "submit" => submit(read_input_to_data(target)),
+
+        "click" => click(MouseData::from(event)),
+        "contextmenu" => contextmenu(MouseData::from(event)),
+        "dblclick" => dblclick(MouseData::from(event)),
+        "doubleclick" => doubleclick(MouseData::from(event)),
+
+        "drag" => drag(DragData::from(event)),
+        "dragend" => dragend(DragData::from(event)),
+        "dragenter" => dragenter(DragData::from(event)),
+        "dragexit" => dragexit(DragData::from(event)),
+        "dragleave" => dragleave(DragData::from(event)),
+        "dragover" => dragover(DragData::from(event)),
+        "dragstart" => dragstart(DragData::from(event)),
+        "drop" => drop(DragData::from(event)),
+
+        "mousedown" => mousedown(MouseData::from(event)),
+        "mouseenter" => mouseenter(MouseData::from(event)),
+        "mouseleave" => mouseleave(MouseData::from(event)),
+        "mousemove" => mousemove(MouseData::from(event)),
+        "mouseout" => mouseout(MouseData::from(event)),
+        "mouseover" => mouseover(MouseData::from(event)),
+        "mouseup" => mouseup(MouseData::from(event)),
+
+        "pointerdown" => pointerdown(PointerData::from(event)),
+        "pointermove" => pointermove(PointerData::from(event)),
+        "pointerup" => pointerup(PointerData::from(event)),
+        "pointercancel" => pointercancel(PointerData::from(event)),
+        "gotpointercapture" => gotpointercapture(PointerData::from(event)),
+        "lostpointercapture" => lostpointercapture(PointerData::from(event)),
+        "pointerenter" => pointerenter(PointerData::from(event)),
+        "pointerleave" => pointerleave(PointerData::from(event)),
+        "pointerover" => pointerover(PointerData::from(event)),
+        "pointerout" => pointerout(PointerData::from(event)),
+
+        "select" => select(SelectionData {}),
+
+        "touchcancel" => touchcancel(TouchData::from(event)),
+        "touchend" => touchend(TouchData::from(event)),
+        "touchmove" => touchmove(TouchData::from(event)),
+        "touchstart" => touchstart(TouchData::from(event)),
+
+        "scroll" => scroll(ScrollData::from(event)),
+
+        "wheel" => wheel(WheelData::from(event)),
+
+        "animationstart" => animationstart(AnimationData::from(event)),
+        "animationend" => animationend(AnimationData::from(event)),
+        "animationiteration" => animationiteration(AnimationData::from(event)),
+
+        "transitionend" => transitionend(TransitionData::from(event)),
+
+        "abort" => abort(MediaData {}),
+        "canplay" => canplay(MediaData {}),
+        "canplaythrough" => canplaythrough(MediaData {}),
+        "durationchange" => durationchange(MediaData {}),
+        "emptied" => emptied(MediaData {}),
+        "encrypted" => encrypted(MediaData {}),
+        "ended" => ended(MediaData {}),
+        "error" => error(MediaData {}),
+        "loadeddata" => loadeddata(MediaData {}),
+        "loadedmetadata" => loadedmetadata(MediaData {}),
+        "loadstart" => loadstart(MediaData {}),
+        "pause" => pause(MediaData {}),
+        "play" => play(MediaData {}),
+        "playing" => playing(MediaData {}),
+        "progress" => progress(MediaData {}),
+        "ratechange" => ratechange(MediaData {}),
+        "seeked" => seeked(MediaData {}),
+        "seeking" => seeking(MediaData {}),
+        "stalled" => stalled(MediaData {}),
+        "suspend" => suspend(MediaData {}),
+        "timeupdate" => timeupdate(MediaData {}),
+        "volumechange" => volumechange(MediaData {}),
+        "waiting" => waiting(MediaData {}),
+
+        "toggle" => toggle(ToggleData {}),
+
+        _ => unknown(),
     }
 }
 
-fn make_composition_event(event: &Event) -> Rc<CompositionData> {
+fn make_composition_event(event: &Event) -> CompositionData {
     let evt: &web_sys::CompositionEvent = event.dyn_ref().unwrap();
-    Rc::new(CompositionData {
+    CompositionData {
         data: evt.data().unwrap_or_default(),
-    })
+    }
 }
 
 pub(crate) fn load_document() -> Document {
@@ -254,7 +302,7 @@ pub(crate) fn load_document() -> Document {
         .expect("should have access to the Document")
 }
 
-fn read_input_to_data(target: Element) -> Rc<FormData> {
+fn read_input_to_data(target: Element) -> FormData {
     // todo: these handlers might get really slow if the input box gets large and allocation pressure is heavy
     // don't have a good solution with the serialized event problem
 
@@ -331,7 +379,7 @@ fn read_input_to_data(target: Element) -> Rc<FormData> {
         }
     }
 
-    Rc::new(FormData { value, values })
+    FormData { value, values }
 }
 
 fn walk_event_for_id(event: &web_sys::Event) -> Option<(ElementId, web_sys::Element)> {

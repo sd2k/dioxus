@@ -218,7 +218,8 @@ pub async fn run_with_props<T: 'static>(root: fn(Scope<T>) -> Element, root_prop
         // Dequeue all of the events from the channel in send order
         // todo: we should re-order these if possible
         while let Some(evt) = res {
-            dom.handle_event(evt.name.as_str(), evt.data, evt.element, evt.bubbles);
+            let (name, data, element, bubbles) = evt.into_parts();
+            dom.handle_event(name, data, element, bubbles);
             res = rx.try_next().transpose().unwrap().ok();
         }
 

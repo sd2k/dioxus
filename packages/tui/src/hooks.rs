@@ -13,7 +13,7 @@ use dioxus_html::geometry::{
 use dioxus_html::input_data::keyboard_types::{Code, Key, Location, Modifiers};
 use dioxus_html::input_data::MouseButtonSet as DioxusMouseButtons;
 use dioxus_html::input_data::{MouseButton as DioxusMouseButton, MouseButtonSet};
-use dioxus_html::{event_bubbles, FocusData, KeyboardData, MouseData, WheelData};
+use dioxus_html::{FocusData, HtmlEvent, KeyboardData, MouseData, WheelData};
 use std::{
     any::Any,
     cell::{RefCell, RefMut},
@@ -25,13 +25,6 @@ use taffy::{prelude::Layout, Taffy};
 
 use crate::{layout_to_screen_space, FocusState};
 use crate::{TuiDom, TuiNode};
-
-pub(crate) struct Event {
-    pub id: ElementId,
-    pub name: &'static str,
-    pub data: Rc<dyn Any>,
-    pub bubbles: bool,
-}
 
 // a wrapper around the input state for easier access
 // todo: fix loop
@@ -202,17 +195,14 @@ impl InnerInputState {
             if let Some(id) = self.focus_state.last_focused_id {
                 let element = dom.tree.get(id).unwrap();
                 if let Some(id) = element.node_data.element_id {
-                    resolved_events.push(Event {
-                        name: "focus",
-                        id,
+                    resolved_events.push(HtmlEvent {
+                        element: id,
                         data: Rc::new(FocusData {}),
-                        bubbles: event_bubbles("focus"),
                     });
                     resolved_events.push(Event {
                         name: "focusin",
                         id,
                         data: Rc::new(FocusData {}),
-                        bubbles: event_bubbles("focusin"),
                     });
                 }
             }
@@ -223,7 +213,6 @@ impl InnerInputState {
                         name: "focusout",
                         id,
                         data: Rc::new(FocusData {}),
-                        bubbles: event_bubbles("focusout"),
                     });
                 }
             }
@@ -275,12 +264,7 @@ impl InnerInputState {
                     parent = dom.parent(parent_id);
                 }
                 if let Some(id) = node.mounted_id() {
-                    resolved_events.push(Event {
-                        name,
-                        id,
-                        data,
-                        bubbles: event_bubbles(name),
-                    })
+                    resolved_events.push(Event { name, id, data })
                 }
             }
         }
@@ -686,7 +670,6 @@ impl RinkInputHandler {
                                 name: event,
                                 id,
                                 data: data.clone(),
-                                bubbles: event_bubbles(event),
                             });
                         }
                     }

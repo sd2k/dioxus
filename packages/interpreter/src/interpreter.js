@@ -133,11 +133,13 @@ class Interpreter {
   NewEventListener(event_name, root, bubbles, handler) {
     const element = this.nodes[root];
     element.setAttribute("data-dioxus-id", `${root}`);
+    let bubbles = event_bubbles(edit.name);
     this.listeners.create(event_name, element, handler, bubbles);
   }
-  RemoveEventListener(root, event_name, bubbles) {
+  RemoveEventListener(root, event_name) {
     const element = this.nodes[root];
     element.removeAttribute(`data-dioxus-id`);
+    let bubbles = event_bubbles(edit.name);
     this.listeners.remove(element, event_name, bubbles);
   }
   SetText(root, text) {
@@ -346,9 +348,6 @@ class Interpreter {
       case "NewEventListener":
         // this handler is only provided on desktop implementations since this
         // method is not used by the web implementationa
-
-        let bubbles = event_bubbles(edit.name);
-
         let handler = (event) => {
           let target = event.target;
           if (target != null) {
@@ -433,12 +432,11 @@ class Interpreter {
                 name: edit.name,
                 element: parseInt(realId),
                 data: contents,
-                bubbles: bubbles,
               })
             );
           }
         };
-        this.NewEventListener(edit.name, edit.id, bubbles, handler);
+        this.NewEventListener(edit.name, edit.id, handler);
         break;
     }
   }

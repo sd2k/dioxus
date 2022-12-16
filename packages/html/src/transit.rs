@@ -4,78 +4,428 @@ use crate::events::*;
 use dioxus_core::ElementId;
 use serde::{Deserialize, Serialize};
 
-// macro_rules! match_data {
-//     (
-//         $m:ident;
-//         $name:ident;
-//         $(
-//             $tip:ty => $($mname:literal)|* ;
-//         )*
-//     ) => {
-//         match $name {
-//             $( $($mname)|* => {
-//                 let val: $tip = from_value::<$tip>($m).ok()?;
-//                 Rc::new(val) as Rc<dyn Any>
-//             })*
-//             _ => return None,
-//         }
-//     };
-// }
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct HtmlEvent {
     pub element: ElementId,
-    pub name: String,
+    #[serde(flatten)]
     pub data: EventData,
-    pub bubbles: bool,
 }
 
 impl HtmlEvent {
-    pub fn bubbles(&self) -> bool {
-        event_bubbles(&self.name)
+    pub fn into_parts(self) -> (&'static str, Rc<dyn Any>, ElementId, bool) {
+        let name = self.data.name();
+        let element = self.element;
+        let bubbles = self.data.bubbles();
+        let data = self.data.into_any();
+        (name, data, element, bubbles)
     }
 }
 
+#[allow(non_camel_case_types)]
 #[derive(Deserialize, Serialize, Debug, Clone)]
-#[serde(untagged)]
+#[serde(tag = "name", content = "data")]
 pub enum EventData {
-    Mouse(MouseData),
-    Clipboard(ClipboardData),
-    Composition(CompositionData),
-    Keyboard(KeyboardData),
-    Focus(FocusData),
-    Form(FormData),
-    Drag(DragData),
-    Pointer(PointerData),
-    Selection(SelectionData),
-    Touch(TouchData),
-    Scroll(ScrollData),
-    Wheel(WheelData),
-    Media(MediaData),
-    Animation(AnimationData),
-    Transition(TransitionData),
-    Toggle(ToggleData),
+    click(MouseData),
+    contextmenu(MouseData),
+    dblclick(MouseData),
+    doubleclick(MouseData),
+    mousedown(MouseData),
+    mouseenter(MouseData),
+    mouseleave(MouseData),
+    mousemove(MouseData),
+    mouseout(MouseData),
+    mouseover(MouseData),
+    mouseup(MouseData),
+
+    copy(ClipboardData),
+    cut(ClipboardData),
+    paste(ClipboardData),
+
+    compositionend(CompositionData),
+    compositionstart(CompositionData),
+    compositionupdate(CompositionData),
+
+    keydown(KeyboardData),
+    keypress(KeyboardData),
+    keyup(KeyboardData),
+
+    blur(FocusData),
+    focus(FocusData),
+    focusin(FocusData),
+    focusout(FocusData),
+
+    change(FormData),
+    input(FormData),
+    invalid(FormData),
+    reset(FormData),
+    submit(FormData),
+
+    drag(DragData),
+    dragend(DragData),
+    dragenter(DragData),
+    dragexit(DragData),
+    dragleave(DragData),
+    dragover(DragData),
+    dragstart(DragData),
+    drop(DragData),
+
+    pointerlockchange(PointerData),
+    pointerlockerror(PointerData),
+    pointerdown(PointerData),
+    pointermove(PointerData),
+    pointerup(PointerData),
+    pointerover(PointerData),
+    pointerout(PointerData),
+    pointercancel(PointerData),
+    pointerenter(PointerData),
+    pointerleave(PointerData),
+    gotpointercapture(PointerData),
+    lostpointercapture(PointerData),
+
+    selectstart(SelectionData),
+    selectionchange(SelectionData),
+    select(SelectionData),
+
+    touchcancel(TouchData),
+    touchend(TouchData),
+    touchmove(TouchData),
+    touchstart(TouchData),
+
+    scroll(ScrollData),
+
+    wheel(WheelData),
+
+    abort(MediaData),
+    canplay(MediaData),
+    canplaythrough(MediaData),
+    durationchange(MediaData),
+    emptied(MediaData),
+    encrypted(MediaData),
+    ended(MediaData),
+    interruptbegin(MediaData),
+    interruptend(MediaData),
+    loadedMediaData(MediaData),
+    loadedmetaMediaData(MediaData),
+    loadstart(MediaData),
+    pause(MediaData),
+    play(MediaData),
+    playing(MediaData),
+    progress(MediaData),
+    ratechange(MediaData),
+    seeked(MediaData),
+    seeking(MediaData),
+    stalled(MediaData),
+    suspend(MediaData),
+    timeupdate(MediaData),
+    volumechange(MediaData),
+    waiting(MediaData),
+    error(MediaData),
+    loadeddata(MediaData),
+    loadedmetadata(MediaData),
+    load(MediaData),
+    loadend(MediaData),
+    timeout(MediaData),
+
+    animationstart(AnimationData),
+    animationend(AnimationData),
+    animationiteration(AnimationData),
+
+    transitionend(TransitionData),
+
+    toggle(ToggleData),
+
+    unknown(),
 }
 
 impl EventData {
-    pub fn into_any(self) -> Rc<dyn Any> {
+    pub fn bubbles(&self) -> bool {
+        use EventData::*;
         match self {
-            EventData::Mouse(data) => Rc::new(data) as Rc<dyn Any>,
-            EventData::Clipboard(data) => Rc::new(data) as Rc<dyn Any>,
-            EventData::Composition(data) => Rc::new(data) as Rc<dyn Any>,
-            EventData::Keyboard(data) => Rc::new(data) as Rc<dyn Any>,
-            EventData::Focus(data) => Rc::new(data) as Rc<dyn Any>,
-            EventData::Form(data) => Rc::new(data) as Rc<dyn Any>,
-            EventData::Drag(data) => Rc::new(data) as Rc<dyn Any>,
-            EventData::Pointer(data) => Rc::new(data) as Rc<dyn Any>,
-            EventData::Selection(data) => Rc::new(data) as Rc<dyn Any>,
-            EventData::Touch(data) => Rc::new(data) as Rc<dyn Any>,
-            EventData::Scroll(data) => Rc::new(data) as Rc<dyn Any>,
-            EventData::Wheel(data) => Rc::new(data) as Rc<dyn Any>,
-            EventData::Media(data) => Rc::new(data) as Rc<dyn Any>,
-            EventData::Animation(data) => Rc::new(data) as Rc<dyn Any>,
-            EventData::Transition(data) => Rc::new(data) as Rc<dyn Any>,
-            EventData::Toggle(data) => Rc::new(data) as Rc<dyn Any>,
+            copy(_) => true,
+            cut(_) => true,
+            paste(_) => true,
+            compositionend(_) => true,
+            compositionstart(_) => true,
+            compositionupdate(_) => true,
+            keydown(_) => true,
+            keypress(_) => true,
+            keyup(_) => true,
+            focus(_) => false,
+            focusout(_) => true,
+            focusin(_) => true,
+            blur(_) => false,
+            change(_) => true,
+            input(_) => true,
+            invalid(_) => true,
+            reset(_) => true,
+            submit(_) => true,
+            click(_) => true,
+            contextmenu(_) => true,
+            doubleclick(_) => true,
+            dblclick(_) => true,
+            drag(_) => true,
+            dragend(_) => true,
+            dragenter(_) => false,
+            dragexit(_) => false,
+            dragleave(_) => true,
+            dragover(_) => true,
+            dragstart(_) => true,
+            drop(_) => true,
+            mousedown(_) => true,
+            mouseenter(_) => false,
+            mouseleave(_) => false,
+            mousemove(_) => true,
+            mouseout(_) => true,
+            scroll(_) => false,
+            mouseover(_) => true,
+            mouseup(_) => true,
+            pointerdown(_) => true,
+            pointermove(_) => true,
+            pointerup(_) => true,
+            pointercancel(_) => true,
+            gotpointercapture(_) => true,
+            lostpointercapture(_) => true,
+            pointerenter(_) => false,
+            pointerleave(_) => false,
+            pointerover(_) => true,
+            pointerout(_) => true,
+            select(_) => true,
+            touchcancel(_) => true,
+            touchend(_) => true,
+            touchmove(_) => true,
+            touchstart(_) => true,
+            wheel(_) => true,
+            abort(_) => false,
+            canplay(_) => false,
+            canplaythrough(_) => false,
+            durationchange(_) => false,
+            emptied(_) => false,
+            encrypted(_) => true,
+            ended(_) => false,
+            error(_) => false,
+            loadeddata(_) => false,
+            loadedmetadata(_) => false,
+            loadstart(_) => false,
+            pause(_) => false,
+            play(_) => false,
+            playing(_) => false,
+            progress(_) => false,
+            ratechange(_) => false,
+            seeked(_) => false,
+            seeking(_) => false,
+            stalled(_) => false,
+            suspend(_) => false,
+            timeupdate(_) => false,
+            volumechange(_) => false,
+            waiting(_) => false,
+            animationstart(_) => true,
+            animationend(_) => true,
+            animationiteration(_) => true,
+            transitionend(_) => true,
+            toggle(_) => true,
+            _ => true,
+        }
+    }
+
+    pub fn name(&self) -> &'static str {
+        use EventData::*;
+        match self {
+            click(_) => "click",
+            contextmenu(_) => "contextmenu",
+            dblclick(_) => "dblclick",
+            doubleclick(_) => "doubleclick",
+            mousedown(_) => "mousedown",
+            mouseenter(_) => "mouseenter",
+            mouseleave(_) => "mouseleave",
+            mousemove(_) => "mousemove",
+            mouseout(_) => "mouseout",
+            mouseover(_) => "mouseover",
+            mouseup(_) => "mouseup",
+            copy(_) => "copy",
+            cut(_) => "cut",
+            paste(_) => "paste",
+            compositionend(_) => "compositionend",
+            compositionstart(_) => "compositionstart",
+            compositionupdate(_) => "compositionupdate",
+            keydown(_) => "keydown",
+            keypress(_) => "keypress",
+            keyup(_) => "keyup",
+            blur(_) => "blur",
+            focus(_) => "focus",
+            focusin(_) => "focusin",
+            focusout(_) => "focusout",
+            change(_) => "change",
+            input(_) => "input",
+            invalid(_) => "invalid",
+            reset(_) => "reset",
+            submit(_) => "submit",
+            drag(_) => "drag",
+            dragend(_) => "dragend",
+            dragenter(_) => "dragenter",
+            dragexit(_) => "dragexit",
+            dragleave(_) => "dragleave",
+            dragover(_) => "dragover",
+            dragstart(_) => "dragstart",
+            drop(_) => "drop",
+            pointerlockchange(_) => "pointerlockchange",
+            pointerlockerror(_) => "pointerlockerror",
+            pointerdown(_) => "pointerdown",
+            pointermove(_) => "pointermove",
+            pointerup(_) => "pointerup",
+            pointerover(_) => "pointerover",
+            pointerout(_) => "pointerout",
+            pointercancel(_) => "pointercancel",
+            pointerenter(_) => "pointerenter",
+            pointerleave(_) => "pointerleave",
+            gotpointercapture(_) => "gotpointercapture",
+            lostpointercapture(_) => "lostpointercapture",
+            selectstart(_) => "selectstart",
+            selectionchange(_) => "selectionchange",
+            select(_) => "select",
+            touchcancel(_) => "touchcancel",
+            touchend(_) => "touchend",
+            touchmove(_) => "touchmove",
+            touchstart(_) => "touchstart",
+            scroll(_) => "scroll",
+            wheel(_) => "wheel",
+            abort(_) => "abort",
+            canplay(_) => "canplay",
+            canplaythrough(_) => "canplaythrough",
+            durationchange(_) => "durationchange",
+            emptied(_) => "emptied",
+            encrypted(_) => "encrypted",
+            ended(_) => "ended",
+            interruptbegin(_) => "interruptbegin",
+            interruptend(_) => "interruptend",
+            loadedMediaData(_) => "loadedMediaData",
+            loadedmetaMediaData(_) => "loadedmetaMediaData",
+            loadstart(_) => "loadstart",
+            pause(_) => "pause",
+            play(_) => "play",
+            playing(_) => "playing",
+            progress(_) => "progress",
+            ratechange(_) => "ratechange",
+            seeked(_) => "seeked",
+            seeking(_) => "seeking",
+            stalled(_) => "stalled",
+            suspend(_) => "suspend",
+            timeupdate(_) => "timeupdate",
+            volumechange(_) => "volumechange",
+            waiting(_) => "waiting",
+            error(_) => "error",
+            loadeddata(_) => "loadeddata",
+            loadedmetadata(_) => "loadedmetadata",
+            load(_) => "load",
+            loadend(_) => "loadend",
+            timeout(_) => "timeout",
+            animationstart(_) => "animationstart",
+            animationend(_) => "animationend",
+            animationiteration(_) => "animationiteration",
+            transitionend(_) => "transitionend",
+            toggle(_) => "toggle",
+
+            _ => "unknown",
+        }
+    }
+
+    pub fn into_any(self) -> Rc<dyn Any> {
+        use EventData::*;
+        match self {
+            click(data) => Rc::new(data) as _,
+            contextmenu(data) => Rc::new(data) as _,
+            dblclick(data) => Rc::new(data) as _,
+            doubleclick(data) => Rc::new(data) as _,
+            mousedown(data) => Rc::new(data) as _,
+            mouseenter(data) => Rc::new(data) as _,
+            mouseleave(data) => Rc::new(data) as _,
+            mousemove(data) => Rc::new(data) as _,
+            mouseout(data) => Rc::new(data) as _,
+            mouseover(data) => Rc::new(data) as _,
+            mouseup(data) => Rc::new(data) as _,
+            copy(data) => Rc::new(data) as _,
+            cut(data) => Rc::new(data) as _,
+            paste(data) => Rc::new(data) as _,
+            compositionend(data) => Rc::new(data) as _,
+            compositionstart(data) => Rc::new(data) as _,
+            compositionupdate(data) => Rc::new(data) as _,
+            keydown(data) => Rc::new(data) as _,
+            keypress(data) => Rc::new(data) as _,
+            keyup(data) => Rc::new(data) as _,
+            blur(data) => Rc::new(data) as _,
+            focus(data) => Rc::new(data) as _,
+            focusin(data) => Rc::new(data) as _,
+            focusout(data) => Rc::new(data) as _,
+            change(data) => Rc::new(data) as _,
+            input(data) => Rc::new(data) as _,
+            invalid(data) => Rc::new(data) as _,
+            reset(data) => Rc::new(data) as _,
+            submit(data) => Rc::new(data) as _,
+            drag(data) => Rc::new(data) as _,
+            dragend(data) => Rc::new(data) as _,
+            dragenter(data) => Rc::new(data) as _,
+            dragexit(data) => Rc::new(data) as _,
+            dragleave(data) => Rc::new(data) as _,
+            dragover(data) => Rc::new(data) as _,
+            dragstart(data) => Rc::new(data) as _,
+            drop(data) => Rc::new(data) as _,
+            pointerlockchange(data) => Rc::new(data) as _,
+            pointerlockerror(data) => Rc::new(data) as _,
+            pointerdown(data) => Rc::new(data) as _,
+            pointermove(data) => Rc::new(data) as _,
+            pointerup(data) => Rc::new(data) as _,
+            pointerover(data) => Rc::new(data) as _,
+            pointerout(data) => Rc::new(data) as _,
+            pointercancel(data) => Rc::new(data) as _,
+            pointerenter(data) => Rc::new(data) as _,
+            pointerleave(data) => Rc::new(data) as _,
+            gotpointercapture(data) => Rc::new(data) as _,
+            lostpointercapture(data) => Rc::new(data) as _,
+            selectstart(data) => Rc::new(data) as _,
+            selectionchange(data) => Rc::new(data) as _,
+            select(data) => Rc::new(data) as _,
+            touchcancel(data) => Rc::new(data) as _,
+            touchend(data) => Rc::new(data) as _,
+            touchmove(data) => Rc::new(data) as _,
+            touchstart(data) => Rc::new(data) as _,
+            scroll(data) => Rc::new(data) as _,
+            wheel(data) => Rc::new(data) as _,
+            abort(data) => Rc::new(data) as _,
+            canplay(data) => Rc::new(data) as _,
+            canplaythrough(data) => Rc::new(data) as _,
+            durationchange(data) => Rc::new(data) as _,
+            emptied(data) => Rc::new(data) as _,
+            encrypted(data) => Rc::new(data) as _,
+            ended(data) => Rc::new(data) as _,
+            interruptbegin(data) => Rc::new(data) as _,
+            interruptend(data) => Rc::new(data) as _,
+            loadedMediaData(data) => Rc::new(data) as _,
+            loadedmetaMediaData(data) => Rc::new(data) as _,
+            loadstart(data) => Rc::new(data) as _,
+            pause(data) => Rc::new(data) as _,
+            play(data) => Rc::new(data) as _,
+            playing(data) => Rc::new(data) as _,
+            progress(data) => Rc::new(data) as _,
+            ratechange(data) => Rc::new(data) as _,
+            seeked(data) => Rc::new(data) as _,
+            seeking(data) => Rc::new(data) as _,
+            stalled(data) => Rc::new(data) as _,
+            suspend(data) => Rc::new(data) as _,
+            timeupdate(data) => Rc::new(data) as _,
+            volumechange(data) => Rc::new(data) as _,
+            waiting(data) => Rc::new(data) as _,
+            error(data) => Rc::new(data) as _,
+            loadeddata(data) => Rc::new(data) as _,
+            loadedmetadata(data) => Rc::new(data) as _,
+            load(data) => Rc::new(data) as _,
+            loadend(data) => Rc::new(data) as _,
+            timeout(data) => Rc::new(data) as _,
+            animationstart(data) => Rc::new(data) as _,
+            animationend(data) => Rc::new(data) as _,
+            animationiteration(data) => Rc::new(data) as _,
+            transitionend(data) => Rc::new(data) as _,
+            toggle(data) => Rc::new(data) as _,
+
+            unknown() => Rc::new(()) as _,
         }
     }
 }
@@ -84,9 +434,7 @@ impl EventData {
 fn test_back_and_forth() {
     let data = HtmlEvent {
         element: ElementId(0),
-        data: EventData::Mouse(MouseData::default()),
-        name: "click".to_string(),
-        bubbles: true,
+        data: EventData::click(MouseData::default()),
     };
 
     println!("{}", serde_json::to_string_pretty(&data).unwrap());
@@ -117,36 +465,3 @@ fn test_back_and_forth() {
 
     let p: HtmlEvent = serde_json::from_str(o).unwrap();
 }
-
-// pub fn decode_event(value: ) -> Option<Rc<dyn Any>> {
-//     let val = value.data;
-//     let name = value.event.as_str();
-//     type DragData = MouseData;
-
-//     let evt = match_data! { val; name;
-//         MouseData => "click" | "contextmenu" | "dblclick" | "doubleclick" | "mousedown" | "mouseenter" | "mouseleave" | "mousemove" | "mouseout" | "mouseover" | "mouseup";
-//         ClipboardData => "copy" | "cut" | "paste";
-//         CompositionData => "compositionend" | "compositionstart" | "compositionupdate";
-//         KeyboardData => "keydown" | "keypress" | "keyup";
-//         FocusData => "blur" | "focus" | "focusin" | "focusout";
-//         FormData => "change" | "input" | "invalid" | "reset" | "submit";
-//         DragData => "drag" | "dragend" | "dragenter" | "dragexit" | "dragleave" | "dragover" | "dragstart" | "drop";
-//         PointerData => "pointerlockchange" | "pointerlockerror" | "pointerdown" | "pointermove" | "pointerup" | "pointerover" | "pointerout" | "pointerenter" | "pointerleave" | "gotpointercapture" | "lostpointercapture";
-//         SelectionData => "selectstart" | "selectionchange" | "select";
-//         TouchData => "touchcancel" | "touchend" | "touchmove" | "touchstart";
-//         ScrollData => "scroll";
-//         WheelData => "wheel";
-//         MediaData => "abort" | "canplay" | "canplaythrough" | "durationchange" | "emptied"
-//             | "encrypted" | "ended" | "interruptbegin" | "interruptend" | "loadeddata"
-//             | "loadedmetadata" | "loadstart" | "pause" | "play" | "playing" | "progress"
-//             | "ratechange" | "seeked" | "seeking" | "stalled" | "suspend" | "timeupdate"
-//             | "volumechange" | "waiting" | "error" | "load" | "loadend" | "timeout";
-//         AnimationData => "animationstart" | "animationend" | "animationiteration";
-//         TransitionData => "transitionend";
-//         ToggleData => "toggle";
-//         // ImageData => "load" | "error";
-//         // OtherData => "abort" | "afterprint" | "beforeprint" | "beforeunload" | "hashchange" | "languagechange" | "message" | "offline" | "online" | "pagehide" | "pageshow" | "popstate" | "rejectionhandled" | "storage" | "unhandledrejection" | "unload" | "userproximity" | "vrdisplayactivate" | "vrdisplayblur" | "vrdisplayconnect" | "vrdisplaydeactivate" | "vrdisplaydisconnect" | "vrdisplayfocus" | "vrdisplaypointerrestricted" | "vrdisplaypointerunrestricted" | "vrdisplaypresentchange";
-//     };
-
-//     Some(evt)
-// }
