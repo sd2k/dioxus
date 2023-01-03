@@ -1,19 +1,51 @@
+use dioxus::events::DragEvent;
 use dioxus::prelude::*;
-use dioxus_desktop::Config;
 
 fn main() {
-    let cfg = Config::new().with_file_drop_handler(|_w, e| {
-        println!("{:?}", e);
-        true
-    });
+    dioxus_desktop::launch(app);
+}
 
-    dioxus_desktop::launch_with_props(app, (), cfg);
+pub trait FilesDesktopExt {
+    fn files(&self) -> Vec<String>;
+}
+
+impl FilesDesktopExt for DragEvent {
+    fn files(&self) -> Vec<String> {
+        self.files.clone()
+    }
 }
 
 fn app(cx: Scope) -> Element {
     cx.render(rsx!(
         div {
             h1 { "drag a file here and check your console" }
+            div {
+                height: "250px",
+                width: "250px",
+                background: "green",
+                draggable: "true",
+            }
+            input {
+                "type": "file",
+                multiple: "true",
+                oninput: move |evt| println!("input event: {:?}", evt),
+            }
+            div {
+                id: "dropzone",
+                height: "500px",
+                width: "500px",
+                background: "red",
+                ondragover: move |evt| {},
+                ondragenter: move |evt: DragEvent| {
+                    println!("drag enter {:?}", evt.files());
+                },
+                ondragleave: move |_| {
+                    println!("drag leave");
+                },
+                ondrop: move |evt| {
+                    println!("drop {:?}", evt.files());
+                },
+            }
         }
     ))
 }

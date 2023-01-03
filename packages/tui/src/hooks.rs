@@ -31,6 +31,7 @@ pub(crate) struct Event {
     pub name: &'static str,
     pub data: Rc<dyn Any>,
     pub bubbles: bool,
+    pub raw: Option<TermEvent>,
 }
 
 // a wrapper around the input state for easier access
@@ -207,12 +208,14 @@ impl InnerInputState {
                         id,
                         data: Rc::new(FocusData {}),
                         bubbles: event_bubbles("focus"),
+                        raw: None,
                     });
                     resolved_events.push(Event {
                         name: "focusin",
                         id,
                         data: Rc::new(FocusData {}),
                         bubbles: event_bubbles("focusin"),
+                        raw: None,
                     });
                 }
             }
@@ -224,6 +227,7 @@ impl InnerInputState {
                         id,
                         data: Rc::new(FocusData {}),
                         bubbles: event_bubbles("focusout"),
+                        raw: None,
                     });
                 }
             }
@@ -280,6 +284,7 @@ impl InnerInputState {
                         id,
                         data,
                         bubbles: event_bubbles(name),
+                        raw: None,
                     })
                 }
             }
@@ -687,6 +692,7 @@ impl RinkInputHandler {
                                 id,
                                 data: data.clone(),
                                 bubbles: event_bubbles(event),
+                                raw: None,
                             });
                         }
                     }

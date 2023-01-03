@@ -13,6 +13,8 @@ pub type DragEvent = Event<DragData>;
 pub struct DragData {
     /// Inherit mouse data
     pub mouse: MouseData,
+
+    pub files: Vec<String>,
 }
 
 impl_event! {

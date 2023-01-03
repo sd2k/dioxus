@@ -190,8 +190,11 @@ pub fn launch_with_props<P: 'static>(root: Component<P>, props: P, cfg: Config) 
 
                     let view = webviews.get_mut(&event.1).unwrap();
 
+                    let data = evt.data.into_any();
+                    let raw = data.clone();
+
                     view.dom
-                        .handle_event(&evt.name, evt.data.into_any(), evt.element, evt.bubbles);
+                        .handle_event(&evt.name, data, raw, evt.element, evt.bubbles);
 
                     send_edits(view.dom.render_immediate(), &view.webview);
                 }

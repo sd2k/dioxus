@@ -33,7 +33,7 @@ impl<'de> Deserialize<'de> for HtmlEvent {
         } = Inner::deserialize(deserializer)?;
 
         Ok(HtmlEvent {
-            data: fun_name(&name, data).unwrap(),
+            data: decode_event(&name, data).unwrap(),
             element,
             bubbles,
             name,
@@ -41,7 +41,7 @@ impl<'de> Deserialize<'de> for HtmlEvent {
     }
 }
 
-fn fun_name(
+fn decode_event(
     name: &str,
     data: serde_value::Value,
 ) -> Result<EventData, serde_value::DeserializerError> {

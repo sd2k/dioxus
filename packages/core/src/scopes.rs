@@ -500,6 +500,7 @@ impl<'src> ScopeState {
                 if let Ok(data) = event.data.downcast::<T>() {
                     callback(Event {
                         propagates: event.propagates,
+                        raw: event.raw,
                         data,
                     })
                 }

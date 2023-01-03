@@ -1,4 +1,5 @@
 use std::{
+    any::Any,
     cell::{Cell, RefCell},
     rc::Rc,
 };
@@ -23,6 +24,9 @@ use std::{
 pub struct Event<T: 'static + ?Sized> {
     /// The data associated with this event
     pub data: Rc<T>,
+
+    pub raw: Rc<dyn Any>,
+
     pub(crate) propagates: Rc<Cell<bool>>,
 }
 
@@ -86,6 +90,7 @@ impl<T: ?Sized> Clone for Event<T> {
         Self {
             propagates: self.propagates.clone(),
             data: self.data.clone(),
+            raw: self.raw.clone(),
         }
     }
 }

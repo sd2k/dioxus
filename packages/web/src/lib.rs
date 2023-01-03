@@ -53,6 +53,8 @@
 //     - Do the VDOM work during the idlecallback
 //     - Do DOM work in the next requestAnimationFrame callback
 
+use std::rc::Rc;
+
 pub use crate::cfg::Config;
 pub use crate::util::{use_eval, EvalResult};
 use dioxus_core::{Element, Scope, VirtualDom};
@@ -222,7 +224,13 @@ pub async fn run_with_props<T: 'static>(root: fn(Scope<T>) -> Element, root_prop
         // Dequeue all of the events from the channel in send order
         // todo: we should re-order these if possible
         while let Some(evt) = res {
-            dom.handle_event(evt.name.as_str(), evt.data, evt.element, evt.bubbles);
+            dom.handle_event(
+                evt.name.as_str(),
+                evt.data,
+                Rc::new(evt.event),
+                evt.element,
+                evt.bubbles,
+            );
             res = rx.try_next().transpose().unwrap().ok();
         }
 

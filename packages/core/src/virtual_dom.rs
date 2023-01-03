@@ -318,6 +318,7 @@ impl VirtualDom {
         &mut self,
         name: &str,
         data: Rc<dyn Any>,
+        raw_event: Rc<dyn Any>,
         element: ElementId,
         bubbles: bool,
     ) {
@@ -348,6 +349,7 @@ impl VirtualDom {
         // We will clone this later. The data itself is wrapped in RC to be used in callbacks if required
         let uievent = Event {
             propagates: Rc::new(Cell::new(bubbles)),
+            raw: raw_event,
             data,
         };
 

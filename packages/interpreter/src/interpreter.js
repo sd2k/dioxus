@@ -376,6 +376,13 @@ class Interpreter {
                 event.preventDefault();
               }
             }
+
+            // Handle drag and drop events
+            if (event.type == "dragenter" || event.type == "dragover" || event.type == "dragleave" || event.type == "drop") {
+              event.dataTransfer.dropEffect = "copy";
+              event.preventDefault();
+            }
+
             // walk the tree to find the real element
             while (realId == null) {
               // we've reached the root we don't want to send an event
@@ -454,27 +461,16 @@ function serialize_event(event) {
     case "compositionend":
     case "compositionstart":
     case "compositionupdate": {
-      let { data } = event;
-      return {
-        data,
-      };
+      return { data: event.data, };
     }
+
     case "keydown":
     case "keypress":
     case "keyup": {
       let {
-        charCode,
-        key,
-        altKey,
-        ctrlKey,
-        metaKey,
-        keyCode,
-        shiftKey,
-        location,
-        repeat,
-        which,
-        code,
+        charCode, key, altKey, ctrlKey, metaKey, keyCode, shiftKey, location, repeat, which, code,
       } = event;
+
       return {
         char_code: charCode,
         key: key,
@@ -526,6 +522,7 @@ function serialize_event(event) {
     case "contextmenu":
     case "doubleclick":
     case "dblclick":
+
     case "drag":
     case "dragend":
     case "dragenter":
@@ -534,6 +531,40 @@ function serialize_event(event) {
     case "dragover":
     case "dragstart":
     case "drop":
+      let file_list = [];
+
+      // on the web, we want to keep the files around
+      // on the desktop, we want to let the OS handle the files
+
+      if (event.dataTransfer) {
+        // copy all the file names into the file array
+        for (let x = 0; x < event.dataTransfer.files.length; x++) {
+          file_list.push(event.dataTransfer.files[x].name);
+        }
+      }
+
+      const {
+        altKey, button, buttons, clientX, clientY, ctrlKey, metaKey, offsetX, offsetY, pageX,pageY, screenX, screenY, shiftKey,
+      } = event;
+      return {
+        files: file_list,
+        mouse: {
+          alt_key: altKey,
+          button: button,
+          buttons: buttons,
+          client_x: clientX,
+          client_y: clientY,
+          ctrl_key: ctrlKey,
+          meta_key: metaKey,
+          offset_x: offsetX,
+          offset_y: offsetY,
+          page_x: pageX,
+          page_y: pageY,
+          screen_x: screenX,
+          screen_y: screenY,
+          shift_key: shiftKey,
+        },
+      };
     case "mousedown":
     case "mouseenter":
     case "mouseleave":
@@ -542,20 +573,7 @@ function serialize_event(event) {
     case "mouseover":
     case "mouseup": {
       const {
-        altKey,
-        button,
-        buttons,
-        clientX,
-        clientY,
-        ctrlKey,
-        metaKey,
-        offsetX,
-        offsetY,
-        pageX,
-        pageY,
-        screenX,
-        screenY,
-        shiftKey,
+        altKey, button, buttons, clientX, clientY, ctrlKey, metaKey, offsetX, offsetY, pageX, pageY, screenX, screenY, shiftKey,
       } = event;
       return {
         alt_key: altKey,
@@ -585,28 +603,8 @@ function serialize_event(event) {
     case "pointerover":
     case "pointerout": {
       const {
-        altKey,
-        button,
-        buttons,
-        clientX,
-        clientY,
-        ctrlKey,
-        metaKey,
-        pageX,
-        pageY,
-        screenX,
-        screenY,
-        shiftKey,
-        pointerId,
-        width,
-        height,
-        pressure,
-        tangentialPressure,
-        tiltX,
-        tiltY,
-        twist,
-        pointerType,
-        isPrimary,
+        altKey, button, buttons, clientX, clientY, ctrlKey, metaKey, pageX, pageY, screenX, screenY, shiftKey,
+        pointerId, width, height, pressure, tangentialPressure, tiltX, tiltY, twist, pointerType, isPrimary,
       } = event;
       return {
         alt_key: altKey,

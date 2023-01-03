@@ -265,7 +265,7 @@ fn render_vdom(
                         updated |= handler.state().focus_state.clean();
                     }
                     for e in evts {
-                        vdom.handle_event(e.name, e.data, e.id, e.bubbles)
+                        vdom.handle_event(e.name, e.data, Rc::new(e.raw), e.id, e.bubbles)
                     }
                     let mut rdom = rdom.borrow_mut();
                     let mutations = vdom.render_immediate();
