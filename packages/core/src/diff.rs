@@ -1,7 +1,7 @@
 use crate::{
     any_props::AnyProps,
     arena::ElementId,
-    innerlude::{DirtyScope, VComponent, VPlaceholder, VText},
+    innerlude::{BorrowedAttributeValue, DirtyScope, VComponent, VPlaceholder, VText},
     mutations::Mutation,
     nodes::RenderReturn,
     nodes::{DynamicNode, VNode},
@@ -42,7 +42,7 @@ impl<'b> VirtualDom {
                 // Just move over the placeholder
                 (Aborted(l), Aborted(r)) => r.id.set(l.id.get()),
 
-                // Becomes async, do nothing while we ait
+                // Becomes async, do nothing while we wait
                 (Ready(_nodes), Pending(_fut)) => self.diff_ok_to_async(_nodes, scope),
 
                 // Placeholder becomes something
@@ -65,8 +65,26 @@ impl<'b> VirtualDom {
         //
     }
 
-    fn diff_ok_to_err(&mut self, _l: &'b VNode<'b>, _p: &'b VPlaceholder) {
-        todo!()
+    fn diff_ok_to_err(&mut self, l: &'b VNode<'b>, p: &'b VPlaceholder) {
+        let id = self.next_null();
+        p.id.set(Some(id));
+        self.mutations.push(Mutation::CreatePlaceholder { id });
+
+        let pre_edits = self.mutations.edits.len();
+
+        self.remove_node(l, true);
+
+        // We should always have a remove mutation
+        // Eventually we don't want to generate placeholders, so this might not be true. But it's true today
+        assert!(self.mutations.edits.len() > pre_edits);
+
+        // We want to optimize the replace case to use one less mutation if possible
+        // Since mutations are done in reverse, the last node removed will be the first in the stack
+        // Instead of *just* removing it, we can use the replace mutation
+        match self.mutations.edits.pop().unwrap() {
+            Mutation::Remove { id } => self.mutations.push(Mutation::ReplaceWith { id, m: 1 }),
+            _ => panic!("Expected remove mutation from remove_node"),
+        };
     }
 
     fn diff_node(&mut self, left_template: &'b VNode<'b>, right_template: &'b VNode<'b>) {
@@ -150,22 +168,16 @@ impl<'b> VirtualDom {
         };
     }
 
-    fn update_attribute(&mut self, right_attr: &Attribute, left_attr: &Attribute) {
-        // todo: add more types of attribute values
-        match right_attr.value {
-            AttributeValue::Text(text) => {
-                let name = unsafe { std::mem::transmute(left_attr.name) };
-                let value = unsafe { std::mem::transmute(text) };
-                self.mutations.push(Mutation::SetAttribute {
-                    id: left_attr.mounted_element.get(),
-                    ns: right_attr.namespace,
-                    name,
-                    value,
-                });
-            }
-            // todo: more types of attribute values
-            _ => todo!("other attribute types"),
-        }
+    fn update_attribute(&mut self, right_attr: &'b Attribute<'b>, left_attr: &'b Attribute) {
+        let name = unsafe { std::mem::transmute(left_attr.name) };
+        let value: BorrowedAttributeValue<'b> = (&right_attr.value).into();
+        let value = unsafe { std::mem::transmute(value) };
+        self.mutations.push(Mutation::SetAttribute {
+            id: left_attr.mounted_element.get(),
+            ns: right_attr.namespace,
+            name,
+            value,
+        });
     }
 
     fn diff_vcomponent(
@@ -911,12 +923,7 @@ impl<'b> VirtualDom {
 
         match unsafe { self.scopes[scope.0].root_node().extend_lifetime_ref() } {
             RenderReturn::Ready(t) => self.remove_node(t, gen_muts),
-            RenderReturn::Aborted(t) => {
-                if let Some(id) = t.id.get() {
-                    self.try_reclaim(id);
-                }
-                return;
-            }
+            RenderReturn::Aborted(placeholder) => self.remove_placeholder(placeholder, gen_muts),
             _ => todo!(),
         };
 

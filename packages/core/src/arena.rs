@@ -1,3 +1,5 @@
+use std::ptr::NonNull;
+
 use crate::{
     nodes::RenderReturn, nodes::VNode, virtual_dom::VirtualDom, AttributeValue, DynamicNode,
     ScopeId,
@@ -17,7 +19,7 @@ pub(crate) struct ElementRef {
     pub path: ElementPath,
 
     // The actual template
-    pub template: *const VNode<'static>,
+    pub template: Option<NonNull<VNode<'static>>>,
 }
 
 #[derive(Clone, Copy)]
@@ -27,9 +29,9 @@ pub enum ElementPath {
 }
 
 impl ElementRef {
-    pub(crate) fn null() -> Self {
+    pub(crate) fn none() -> Self {
         Self {
-            template: std::ptr::null_mut(),
+            template: None,
             path: ElementPath::Root(0),
         }
     }
@@ -44,12 +46,21 @@ impl VirtualDom {
         self.next_reference(template, ElementPath::Root(path))
     }
 
+    pub(crate) fn next_null(&mut self) -> ElementId {
+        let entry = self.elements.vacant_entry();
+        let id = entry.key();
+
+        entry.insert(ElementRef::none());
+        ElementId(id)
+    }
+
     fn next_reference(&mut self, template: &VNode, path: ElementPath) -> ElementId {
         let entry = self.elements.vacant_entry();
         let id = entry.key();
 
         entry.insert(ElementRef {
-            template: template as *const _ as *mut _,
+            // We know this is non-null because it comes from a reference
+            template: Some(unsafe { NonNull::new_unchecked(template as *const _ as *mut _) }),
             path,
         });
         ElementId(id)
@@ -153,11 +164,17 @@ impl VirtualDom {
         });
 
         // Now that all the references are gone, we can safely drop our own references in our listeners.
-        let mut listeners = scope.listeners.borrow_mut();
+        let mut listeners = scope.attributes_to_drop.borrow_mut();
         listeners.drain(..).for_each(|listener| {
             let listener = unsafe { &*listener };
-            if let AttributeValue::Listener(l) = &listener.value {
-                _ = l.take();
+            match &listener.value {
+                AttributeValue::Listener(l) => {
+                    _ = l.take();
+                }
+                AttributeValue::Any(a) => {
+                    _ = a.take();
+                }
+                _ => (),
             }
         });
     }

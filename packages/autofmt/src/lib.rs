@@ -1,13 +1,14 @@
 use dioxus_rsx::CallBody;
 
-use crate::buffer::*;
 use crate::util::*;
+use crate::writer::*;
 
 mod buffer;
 mod component;
 mod element;
 mod expr;
 mod util;
+mod writer;
 
 /// A modification to the original file to be applied by an IDE
 ///
@@ -45,6 +46,8 @@ pub fn fmt_file(contents: &str) -> Vec<FormattedBlock> {
     use triple_accel::{levenshtein_search, Match};
 
     for Match { end, start, k } in levenshtein_search(b"rsx! {", contents.as_bytes()) {
+        let open = end;
+
         if k > 1 {
             continue;
         }
@@ -54,7 +57,7 @@ pub fn fmt_file(contents: &str) -> Vec<FormattedBlock> {
             continue;
         }
 
-        let mut indent_level = {
+        let indent_level = {
             // walk backwards from start until we find a new line
             let mut lines = contents[..start].lines().rev();
             match lines.next() {
@@ -69,31 +72,34 @@ pub fn fmt_file(contents: &str) -> Vec<FormattedBlock> {
             }
         };
 
-        let remaining = &contents[end - 1..];
-        let bracket_end = find_bracket_end(remaining).unwrap();
-        let sub_string = &contents[end..bracket_end + end - 1];
-        last_bracket_end = bracket_end + end - 1;
+        let remaining = &contents[open - 1..];
+        let close = find_bracket_end(remaining).unwrap();
+        // Move the last bracket end to the end of this block to avoid nested blocks
+        last_bracket_end = close + open - 1;
 
-        let mut new = fmt_block(sub_string, indent_level).unwrap();
+        // Format the substring, doesn't include the outer brackets
+        let substring = &remaining[1..close - 1];
 
+        // make sure to add back whatever weird whitespace there was at the end
+        let mut remaining_whitespace = substring.chars().rev().take_while(|c| *c == ' ').count();
+
+        let mut new = fmt_block(substring, indent_level).unwrap();
+
+        // if the new string is not multiline, don't try to adjust the marker ending
+        // We want to trim off any indentation that there might be
         if new.len() <= 80 && !new.contains('\n') {
             new = format!(" {new} ");
-
-            // if the new string is not multiline, don't try to adjust the marker ending
-            // We want to trim off any indentation that there might be
-            indent_level = 0;
+            remaining_whitespace = 0;
         }
 
-        let end_marker = end + bracket_end - indent_level * 4 - 1;
-
-        if new == contents[end..end_marker] {
+        if new == substring {
             continue;
         }
 
         formatted_blocks.push(FormattedBlock {
             formatted: new,
-            start: end,
-            end: end_marker,
+            start: open,
+            end: last_bracket_end - remaining_whitespace - 1,
         });
     }
 
@@ -101,10 +107,9 @@ pub fn fmt_file(contents: &str) -> Vec<FormattedBlock> {
 }
 
 pub fn write_block_out(body: CallBody) -> Option<String> {
-    let mut buf = Buffer {
+    let mut buf = Writer {
         src: vec!["".to_string()],
-        indent: 0,
-        ..Buffer::default()
+        ..Writer::default()
     };
 
     // Oneliner optimization
@@ -118,13 +123,14 @@ pub fn write_block_out(body: CallBody) -> Option<String> {
 }
 
 pub fn fmt_block(block: &str, indent_level: usize) -> Option<String> {
-    let body = syn::parse_str::<dioxus_rsx::CallBody>(block).ok()?;
+    let body = syn::parse_str::<dioxus_rsx::CallBody>(block).unwrap();
 
-    let mut buf = Buffer {
+    let mut buf = Writer {
         src: block.lines().map(|f| f.to_string()).collect(),
-        indent: indent_level,
-        ..Buffer::default()
+        ..Writer::default()
     };
+
+    buf.out.indent = indent_level;
 
     // Oneliner optimization
     if buf.is_short_children(&body.roots).is_some() {
@@ -134,8 +140,8 @@ pub fn fmt_block(block: &str, indent_level: usize) -> Option<String> {
     }
 
     // writing idents leaves the final line ended at the end of the last ident
-    if buf.buf.contains('\n') {
-        buf.new_line().unwrap();
+    if buf.out.buf.contains('\n') {
+        buf.out.new_line().unwrap();
     }
 
     buf.consume()
