@@ -10,11 +10,11 @@
 use dioxus_core::{
     BorrowedAttributeValue, ElementId, Mutation, Template, TemplateAttribute, TemplateNode,
 };
-use dioxus_html::{event_bubbles, CompositionData, FormData};
+use dioxus_html::{event_bubbles, CompositionData, DragData, FileEngine, FormData, MouseData};
 use dioxus_interpreter_js::{save_template, Channel};
 use futures_channel::mpsc;
 use rustc_hash::FxHashMap;
-use std::{any::Any, rc::Rc};
+use std::{any::Any, rc::Rc, sync::Arc};
 use wasm_bindgen::{closure::Closure, JsCast};
 use web_sys::{Document, Element, Event, HtmlElement};
 
@@ -234,10 +234,7 @@ pub fn virtual_event_from_websys_event(event: web_sys::Event, target: Element) -
             Rc::new(MouseData::from(event))
         }
         "drag" | "dragend" | "dragenter" | "dragexit" | "dragleave" | "dragover" | "dragstart"
-        | "drop" => {
-            let mouse = MouseData::from(event);
-            Rc::new(DragData { mouse })
-        }
+        | "drop" => make_drag_event(&event),
 
         "pointerdown" | "pointermove" | "pointerup" | "pointercancel" | "gotpointercapture"
         | "lostpointercapture" | "pointerenter" | "pointerleave" | "pointerover" | "pointerout" => {
@@ -260,6 +257,97 @@ pub fn virtual_event_from_websys_event(event: web_sys::Event, target: Element) -
 
         _ => Rc::new(()),
     }
+}
+
+fn make_drag_event(event: &Event) -> Rc<dioxus_html::DragData> {
+    struct DragAndDropFileEngine {
+        files: Option<Vec<String>>,
+        file_list: Option<web_sys::FileList>,
+    }
+
+    #[async_trait::async_trait(?Send)]
+    impl FileEngine for DragAndDropFileEngine {
+        fn files(&self) -> Vec<String> {
+            self.files.clone().unwrap_or_default()
+        }
+
+        async fn read_file(&self, file_name: &str) -> Option<Vec<u8>> {
+            let files = self.files.as_ref()?;
+            let file_index = files.iter().position(|f| f.as_str() == file_name)?;
+            let file = self.file_list.as_ref()?.item(file_index as u32)?;
+
+            let as_blob: web_sys::Blob = file.dyn_into().unwrap();
+            let prom = as_blob.array_buffer();
+            let val = wasm_bindgen_futures::JsFuture::from(prom).await.ok()?;
+            let view = js_sys::Uint8Array::new(&val);
+            Some(view.to_vec())
+        }
+
+        async fn read_file_to_string(&self, file_name: &str) -> Option<String> {
+            let files = self.files.as_ref()?;
+            let file_index = files.iter().position(|f| f.as_str() == file_name)?;
+            let file = self.file_list.as_ref()?.item(file_index as u32)?;
+
+            let as_blob: web_sys::Blob = file.dyn_into().unwrap();
+            let prom = as_blob.text();
+            let val = wasm_bindgen_futures::JsFuture::from(prom).await.ok()?;
+
+            val.as_string()
+        }
+
+        async fn file_name(&self) -> Option<String> {
+            let list = self.file_list.as_ref()?.clone();
+
+            let file = list.get(0)?;
+
+            if let Ok(field) = js_sys::Reflect::get(&file, &"webkitRelativePath".into()) {
+                if let Some(field) = field.as_string() {
+                    return Some(field);
+                }
+            }
+
+            None
+        }
+    }
+
+    let evt: &web_sys::DragEvent = event.dyn_ref().as_ref().unwrap();
+
+    let should_prevent = match event.type_().as_str() {
+        "dragenter" | "ondragover" | "dragleave" | "drop" => true,
+        _ => false,
+    };
+
+    // if (event.type == "dragenter" || event.type == "dragover" || event.type == "dragleave" || event.type == "drop") {
+    //    event.dataTransfer.dropEffect = "copy";
+    //    event.preventDefault();
+
+    if should_prevent {
+        event.prevent_default();
+    }
+
+    if let Some(transfer) = evt.data_transfer() {
+        transfer.set_drop_effect("copy");
+    }
+
+    let transfer = evt.data_transfer();
+    let file_list = transfer.and_then(|f| f.files());
+    let files = file_list.as_ref().and_then(|file_list| {
+        let mut f = vec![];
+        for x in 0..file_list.length() {
+            let item = file_list.get(x).unwrap();
+            f.push(item.name())
+        }
+        Some(f)
+    });
+
+    let files = Arc::new(DragAndDropFileEngine { file_list, files });
+
+    let mouse = MouseData::from(event);
+
+    Rc::new(DragData {
+        mouse,
+        files: Some(files),
+    })
 }
 
 fn make_composition_event(event: &Event) -> Rc<CompositionData> {
@@ -353,10 +441,94 @@ fn read_input_to_data(target: Element) -> Rc<FormData> {
         }
     }
 
+    #[derive(Debug)]
+    struct InputFileEngine {
+        target: Option<web_sys::HtmlInputElement>,
+        files: Option<Vec<String>>,
+        file_list: Option<web_sys::FileList>,
+    }
+    impl InputFileEngine {
+        fn new(el: Element) -> Self {
+            match el.dyn_ref::<web_sys::HtmlInputElement>() {
+                Some(el) => {
+                    let target = el.clone();
+
+                    let mut files = vec![];
+
+                    let file_list = el.files();
+                    if let Some(list) = file_list.as_ref() {
+                        for x in 0..list.length() {
+                            let file = list.item(x).unwrap();
+                            files.push(file.name());
+                        }
+                    }
+
+                    Self {
+                        target: Some(target),
+                        files: Some(files),
+                        file_list,
+                    }
+                }
+                None => Self {
+                    files: Default::default(),
+                    target: None,
+                    file_list: None,
+                },
+            }
+        }
+    }
+
+    #[async_trait::async_trait(?Send)]
+    impl FileEngine for InputFileEngine {
+        fn files(&self) -> Vec<String> {
+            self.files.clone().unwrap_or_default()
+        }
+
+        async fn read_file(&self, file_name: &str) -> Option<Vec<u8>> {
+            let files = self.files.as_ref()?;
+            let file_index = files.iter().position(|f| f.as_str() == file_name)?;
+            let file = self.file_list.as_ref()?.item(file_index as u32)?;
+
+            let as_blob: web_sys::Blob = file.dyn_into().unwrap();
+            let prom = as_blob.array_buffer();
+            let val = wasm_bindgen_futures::JsFuture::from(prom).await.ok()?;
+            let view = js_sys::Uint8Array::new(&val);
+            Some(view.to_vec())
+        }
+
+        async fn read_file_to_string(&self, file_name: &str) -> Option<String> {
+            log::debug!("{:?}", self);
+
+            let files = self.files.as_ref()?;
+            let file_index = files.iter().position(|f| f.as_str() == file_name)?;
+            let file = self.file_list.as_ref()?.item(file_index as u32)?;
+
+            let as_blob: web_sys::Blob = file.dyn_into().unwrap();
+            let prom = as_blob.text();
+            let val = wasm_bindgen_futures::JsFuture::from(prom).await.ok()?;
+
+            val.as_string()
+        }
+
+        async fn file_name(&self) -> Option<String> {
+            let list = self.file_list.as_ref()?.clone();
+
+            let file = list.get(0)?;
+
+            if let Ok(field) = js_sys::Reflect::get(&file, &"webkitRelativePath".into()) {
+                if let Some(field) = field.as_string() {
+                    return Some(field.split("/").next().unwrap().to_string());
+                }
+            }
+
+            None
+        }
+    }
+
     Rc::new(FormData {
         value,
         values,
-        files: None,
+        files: Some(Arc::new(InputFileEngine::new(target))),
     })
 }
 

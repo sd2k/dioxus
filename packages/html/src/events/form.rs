@@ -41,6 +41,10 @@ pub trait FileEngine {
 
     // read a file to string
     async fn read_file_to_string(&self, file: &str) -> Option<String>;
+
+    async fn file_name(&self) -> Option<String> {
+        None
+    }
 }
 
 impl_event! {
