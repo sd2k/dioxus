@@ -12,7 +12,7 @@ use dioxus_html::event_bubbles;
 use dioxus_interpreter_js::Interpreter;
 use js_sys::Function;
 use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
-use wasm_bindgen::{closure::Closure, JsCast};
+use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use web_sys::{Document, Element, Event, HtmlElement};
 
 use crate::Config;
@@ -334,6 +334,20 @@ fn virtual_event_from_websys_event(event: web_sys::Event, target: Element) -> Ar
 
                     val.as_string()
                 }
+
+                async fn file_name(&self) -> Option<String> {
+                    let list = self.file_list.as_ref()?.clone();
+
+                    let file = list.get(0)?;
+
+                    if let Ok(field) = js_sys::Reflect::get(&file, &"webkitRelativePath".into()) {
+                        if let Some(field) = field.as_string() {
+                            return Some(field.split("/").next().unwrap().to_string());
+                        }
+                    }
+
+                    None
+                }
             }
 
             Arc::new(FormEvent {
@@ -401,6 +415,20 @@ fn virtual_event_from_websys_event(event: web_sys::Event, target: Element) -> Ar
                     let val = wasm_bindgen_futures::JsFuture::from(prom).await.ok()?;
 
                     val.as_string()
+                }
+
+                async fn file_name(&self) -> Option<String> {
+                    let list = self.file_list.as_ref()?.clone();
+
+                    let file = list.get(0)?;
+
+                    if let Ok(field) = js_sys::Reflect::get(&file, &"webkitRelativePath".into()) {
+                        if let Some(field) = field.as_string() {
+                            return Some(field);
+                        }
+                    }
+
+                    None
                 }
             }
 
