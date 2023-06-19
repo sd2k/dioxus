@@ -53,15 +53,8 @@ class ListenerMap {
   }
 }
 
-class InterpreterConfig {
-  constructor(intercept_link_redirects) {
-    this.intercept_link_redirects = intercept_link_redirects;
-  }
-}
-
 class Interpreter {
-  constructor(root, config) {
-    this.config = config;
+  constructor(root) {
     this.root = root;
     this.listeners = new ListenerMap(root);
     this.nodes = [root];
@@ -404,7 +397,7 @@ class Interpreter {
           );
         } else {
           this.NewEventListener(edit.name, edit.id, bubbles, (event) => {
-            handler(event, edit.name, bubbles, this.config);
+            handler(event, edit.name, bubbles);
           });
         }
         break;
@@ -414,41 +407,33 @@ class Interpreter {
 
 // this handler is only provided on the desktop and liveview implementations since this
 // method is not used by the web implementation
-function handler(event, name, bubbles, config) {
+function handler(event, name, bubbles) {
   let target = event.target;
   if (target != null) {
     let preventDefaultRequests = target.getAttribute(`dioxus-prevent-default`);
 
     if (event.type === "click") {
-      // todo call prevent default if it's the right type of event
-      if (config.intercept_link_redirects) {
-        let a_element = target.closest("a");
-        if (a_element != null) {
-          event.preventDefault();
+      let a_element = target.closest("a");
+      if (a_element != null) {
+        event.preventDefault();
 
-          let elementShouldPreventDefault =
-            preventDefaultRequests && preventDefaultRequests.includes(`onclick`);
-          let aElementShouldPreventDefault = a_element.getAttribute(
-            `dioxus-prevent-default`
-          );
-          let linkShouldPreventDefault =
-            aElementShouldPreventDefault &&
-            aElementShouldPreventDefault.includes(`onclick`);
+        let elementShouldPreventDefault =
+          preventDefaultRequests && preventDefaultRequests.includes(`onclick`);
+        let aElementShouldPreventDefault = a_element.getAttribute(
+          `dioxus-prevent-default`
+        );
+        let linkShouldPreventDefault =
+          aElementShouldPreventDefault &&
+          aElementShouldPreventDefault.includes(`onclick`);
 
-          if (!elementShouldPreventDefault && !linkShouldPreventDefault) {
-            const href = a_element.getAttribute("href");
-            if (href !== "" && href !== null && href !== undefined) {
-              window.ipc.postMessage(
-                serializeIpcMessage("browser_open", { href })
-              );
-            }
+        if (!elementShouldPreventDefault && !linkShouldPreventDefault) {
+          const href = a_element.getAttribute("href");
+          if (href !== "" && href !== null && href !== undefined) {
+            window.ipc.postMessage(
+              serializeIpcMessage("browser_open", { href })
+            );
           }
         }
-      }
-
-      // also prevent buttons from submitting
-      if (target.tagName === "BUTTON" && event.type == "submit") {
-        event.preventDefault();
       }
     }
 
