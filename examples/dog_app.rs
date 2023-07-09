@@ -5,13 +5,13 @@ fn main() {
     dioxus_desktop::launch(|cx| render!(app_root {}));
 }
 
-#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
-struct ListBreeds {
-    message: HashMap<String, Vec<String>>,
-}
-
 fn app_root(cx: Scope<'_>) -> Element {
     let breed = use_state(cx, || "deerhound".to_string());
+
+    #[derive(Debug, Clone, PartialEq, serde::Deserialize)]
+    struct ListBreeds {
+        message: HashMap<String, Vec<String>>,
+    }
 
     let breeds = use_future!(cx, || async move {
         reqwest::get("https://dog.ceo/api/breeds/list/all")
@@ -44,13 +44,13 @@ fn app_root(cx: Scope<'_>) -> Element {
     }
 }
 
-#[derive(serde::Deserialize, Debug)]
-struct DogApi {
-    message: String,
-}
-
 #[inline_props]
 fn breed_pic(cx: Scope, breed: String) -> Element {
+    #[derive(serde::Deserialize, Debug)]
+    struct DogApi {
+        message: String,
+    }
+
     let fut = use_future!(cx, |breed| async move {
         reqwest::get(format!("https://dog.ceo/api/breed/{breed}/images/random"))
             .await
