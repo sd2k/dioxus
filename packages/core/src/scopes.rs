@@ -6,7 +6,7 @@ use crate::{
     innerlude::{DynamicNode, EventHandler, VComponent, VText},
     innerlude::{ErrorBoundary, Scheduler, SchedulerMsg},
     lazynodes::LazyNodes,
-    nodes::{ComponentReturn, IntoAttributeValue, IntoDynNode, RenderReturn},
+    nodes::{IntoAttributeValue, IntoDynNode},
     AnyValue, Attribute, AttributeValue, Element, Event, Properties, TaskId,
 };
 use bumpalo::{boxed::Box as BumpBox, Bump};
@@ -230,7 +230,7 @@ impl<'src> ScopeState {
     /// This is useful for traversing the tree outside of the VirtualDom, such as in a custom renderer or in SSR.
     ///
     /// Panics if the tree has not been built yet.
-    pub fn root_node(&self) -> &RenderReturn {
+    pub fn root_node(&self) -> &Element {
         self.try_root_node()
             .expect("The tree has not been built yet. Make sure to call rebuild on the tree before accessing its nodes.")
     }
@@ -240,16 +240,18 @@ impl<'src> ScopeState {
     /// This is useful for traversing the tree outside of the VirtualDom, such as in a custom renderer or in SSR.
     ///
     /// Returns [`None`] if the tree has not been built yet.
-    pub fn try_root_node(&self) -> Option<&RenderReturn> {
+    pub fn try_root_node(&self) -> Option<&Element> {
         let ptr = self.current_frame().node.get();
 
         if ptr.is_null() {
             return None;
         }
 
-        let r: &RenderReturn = unsafe { &*ptr };
+        todo!()
 
-        unsafe { std::mem::transmute(r) }
+        // let r: &RenderReturn = unsafe { &*ptr };
+
+        // unsafe { std::mem::transmute(r) }
     }
 
     /// Get the height of this Scope - IE the number of scopes above it.
@@ -555,9 +557,9 @@ impl<'src> ScopeState {
     /// fn(Scope<Props>) -> Element;
     /// async fn(Scope<Props<'_>>) -> Element;
     /// ```
-    pub fn component<P, A, F: ComponentReturn<'src, A>>(
+    pub fn component<P, A>(
         &'src self,
-        component: fn(Scope<'src, P>) -> F,
+        component: fn(Scope<'src, P>) -> Element<'src>,
         props: P,
         fn_name: &'static str,
     ) -> DynamicNode<'src>

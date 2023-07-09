@@ -3,7 +3,6 @@ use crate::{
     arena::ElementId,
     innerlude::{BorrowedAttributeValue, DirtyScope, VComponent, VPlaceholder, VText},
     mutations::Mutation,
-    nodes::RenderReturn,
     nodes::{DynamicNode, VNode},
     scopes::ScopeId,
     virtual_dom::VirtualDom,
@@ -30,33 +29,31 @@ impl<'b> VirtualDom {
                 .try_load_node()
                 .expect("Call rebuild before diffing");
 
-            use RenderReturn::{Aborted, Pending, Ready};
+            // match (old, new) {
+            //     // Normal pathway
+            //     (Ready(l), Ready(r)) => self.diff_node(l, r),
 
-            match (old, new) {
-                // Normal pathway
-                (Ready(l), Ready(r)) => self.diff_node(l, r),
+            //     // Unwind the mutations if need be
+            //     (Ready(l), Aborted(p)) => self.diff_ok_to_err(l, p),
 
-                // Unwind the mutations if need be
-                (Ready(l), Aborted(p)) => self.diff_ok_to_err(l, p),
+            //     // Just move over the placeholder
+            //     (Aborted(l), Aborted(r)) => r.id.set(l.id.get()),
 
-                // Just move over the placeholder
-                (Aborted(l), Aborted(r)) => r.id.set(l.id.get()),
+            //     // Becomes async, do nothing while we wait
+            //     (Ready(_nodes), Pending(_fut)) => self.diff_ok_to_async(_nodes, scope),
 
-                // Becomes async, do nothing while we wait
-                (Ready(_nodes), Pending(_fut)) => self.diff_ok_to_async(_nodes, scope),
+            //     // Placeholder becomes something
+            //     // We should also clear the error now
+            //     (Aborted(l), Ready(r)) => self.replace_placeholder(l, [r]),
 
-                // Placeholder becomes something
-                // We should also clear the error now
-                (Aborted(l), Ready(r)) => self.replace_placeholder(l, [r]),
-
-                (Aborted(_), Pending(_)) => todo!("async should not resolve here"),
-                (Pending(_), Ready(_)) => todo!("async should not resolve here"),
-                (Pending(_), Aborted(_)) => todo!("async should not resolve here"),
-                (Pending(_), Pending(_)) => {
-                    // All suspense should resolve before we diff it again
-                    panic!("Should not roll from suspense to suspense.");
-                }
-            };
+            //     (Aborted(_), Pending(_)) => todo!("async should not resolve here"),
+            //     (Pending(_), Ready(_)) => todo!("async should not resolve here"),
+            //     (Pending(_), Aborted(_)) => todo!("async should not resolve here"),
+            //     (Pending(_), Pending(_)) => {
+            //         // All suspense should resolve before we diff it again
+            //         panic!("Should not roll from suspense to suspense.");
+            //     }
+            // };
         }
         self.scope_stack.pop();
     }
@@ -732,11 +729,13 @@ impl<'b> VirtualDom {
 
                     Component(comp) => {
                         let scope = comp.scope.get().unwrap();
-                        match unsafe { self.scopes[scope].root_node().extend_lifetime_ref() } {
-                            RenderReturn::Ready(node) => self.push_all_real_nodes(node),
-                            RenderReturn::Aborted(_node) => todo!(),
-                            _ => todo!(),
-                        }
+
+                        todo!()
+                        // match unsafe { self.scopes[scope].root_node().extend_lifetime_ref() } {
+                        //     RenderReturn::Ready(node) => self.push_all_real_nodes(node),
+                        //     RenderReturn::Aborted(_node) => todo!(),
+                        //     _ => todo!(),
+                        // }
                     }
                 }
             })
@@ -933,12 +932,14 @@ impl<'b> VirtualDom {
             .take()
             .expect("VComponents to always have a scope");
 
+        todo!();
+
         // Remove the component from the dom
-        match unsafe { self.scopes[scope].root_node().extend_lifetime_ref() } {
-            RenderReturn::Ready(t) => self.remove_node(t, gen_muts),
-            RenderReturn::Aborted(placeholder) => self.remove_placeholder(placeholder, gen_muts),
-            _ => todo!(),
-        };
+        // match unsafe { self.scopes[scope].root_node().extend_lifetime_ref() } {
+        //     RenderReturn::Ready(t) => self.remove_node(t, gen_muts),
+        //     RenderReturn::Aborted(placeholder) => self.remove_placeholder(placeholder, gen_muts),
+        //     _ => todo!(),
+        // };
 
         // Restore the props back to the vcomponent in case it gets rendered again
         let props = self.scopes[scope].props.take();
@@ -955,11 +956,12 @@ impl<'b> VirtualDom {
             Some(Fragment(t)) => self.find_first_element(&t[0]),
             Some(Placeholder(t)) => t.id.get().unwrap(),
             Some(Component(comp)) => {
-                let scope = comp.scope.get().unwrap();
-                match unsafe { self.scopes[scope].root_node().extend_lifetime_ref() } {
-                    RenderReturn::Ready(t) => self.find_first_element(t),
-                    _ => todo!("cannot handle nonstandard nodes"),
-                }
+                todo!();
+                // let scope = comp.scope.get().unwrap();
+                // match unsafe { self.scopes[scope].root_node().extend_lifetime_ref() } {
+                //     RenderReturn::Ready(t) => self.find_first_element(t),
+                //     _ => todo!("cannot handle nonstandard nodes"),
+                // }
             }
         }
     }
@@ -971,11 +973,12 @@ impl<'b> VirtualDom {
             Some(Fragment(t)) => self.find_last_element(t.last().unwrap()),
             Some(Placeholder(t)) => t.id.get().unwrap(),
             Some(Component(comp)) => {
-                let scope = comp.scope.get().unwrap();
-                match unsafe { self.scopes[scope].root_node().extend_lifetime_ref() } {
-                    RenderReturn::Ready(t) => self.find_last_element(t),
-                    _ => todo!("cannot handle nonstandard nodes"),
-                }
+                todo!();
+                // let scope = comp.scope.get().unwrap();
+                // match unsafe { self.scopes[scope].root_node().extend_lifetime_ref() } {
+                //     RenderReturn::Ready(t) => self.find_last_element(t),
+                //     _ => todo!("cannot handle nonstandard nodes"),
+                // }
             }
         }
     }

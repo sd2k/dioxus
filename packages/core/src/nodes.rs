@@ -12,33 +12,6 @@ use std::{
 
 pub type TemplateId = &'static str;
 
-/// The actual state of the component's most recent computation
-///
-/// Because Dioxus accepts components in the form of `async fn(Scope) -> Result<VNode>`, we need to support both
-/// sync and async versions.
-///
-/// Dioxus will do its best to immediately resolve any async components into a regular Element, but as an implementor
-/// you might need to handle the case where there's no node immediately ready.
-pub enum RenderReturn<'a> {
-    /// A currently-available element
-    Ready(VNode<'a>),
-
-    /// The component aborted rendering early. It might've thrown an error.
-    ///
-    /// In its place we've produced a placeholder to locate its spot in the dom when
-    /// it recovers.
-    Aborted(VPlaceholder),
-
-    /// An ongoing future that will resolve to a [`Element`]
-    Pending(BumpBox<'a, dyn Future<Output = Element<'a>> + 'a>),
-}
-
-impl<'a> Default for RenderReturn<'a> {
-    fn default() -> Self {
-        RenderReturn::Aborted(VPlaceholder::default())
-    }
-}
-
 /// A reference to a template along with any context needed to hydrate it
 ///
 /// The dynamic parts of the template are stored separately from the static parts. This allows faster diffing by skipping
@@ -685,41 +658,6 @@ impl<T: Any + PartialEq + 'static> AnyValue for T {
 
     fn as_any(&self) -> &dyn Any {
         self
-    }
-}
-
-#[doc(hidden)]
-pub trait ComponentReturn<'a, A = ()> {
-    fn into_return(self, cx: &'a ScopeState) -> RenderReturn<'a>;
-}
-
-impl<'a> ComponentReturn<'a> for Element<'a> {
-    fn into_return(self, _cx: &ScopeState) -> RenderReturn<'a> {
-        match self {
-            Some(node) => RenderReturn::Ready(node),
-            None => RenderReturn::default(),
-        }
-    }
-}
-
-#[doc(hidden)]
-pub struct AsyncMarker;
-impl<'a, F> ComponentReturn<'a, AsyncMarker> for F
-where
-    F: Future<Output = Element<'a>> + 'a,
-{
-    fn into_return(self, cx: &'a ScopeState) -> RenderReturn<'a> {
-        let f: &mut dyn Future<Output = Element<'a>> = cx.bump().alloc(self);
-        RenderReturn::Pending(unsafe { BumpBox::from_raw(f) })
-    }
-}
-
-impl<'a> RenderReturn<'a> {
-    pub(crate) unsafe fn extend_lifetime_ref<'c>(&self) -> &'c RenderReturn<'c> {
-        unsafe { std::mem::transmute(self) }
-    }
-    pub(crate) unsafe fn extend_lifetime<'c>(self) -> RenderReturn<'c> {
-        unsafe { std::mem::transmute(self) }
     }
 }
 

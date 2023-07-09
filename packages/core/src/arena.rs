@@ -1,8 +1,8 @@
 use std::ptr::NonNull;
 
 use crate::{
-    innerlude::DirtyScope, nodes::RenderReturn, nodes::VNode, virtual_dom::VirtualDom,
-    AttributeValue, DynamicNode, ScopeId,
+    innerlude::DirtyScope, nodes::VNode, virtual_dom::VirtualDom, AttributeValue, DynamicNode,
+    ScopeId,
 };
 
 /// An Element's unique identifier.
@@ -98,11 +98,11 @@ impl VirtualDom {
         self.ensure_drop_safety(id);
 
         if recursive {
-            if let Some(root) = self.scopes[id].try_root_node() {
-                if let RenderReturn::Ready(node) = unsafe { root.extend_lifetime_ref() } {
-                    self.drop_scope_inner(node)
-                }
-            }
+            // if let Some(root) = self.scopes[id].try_root_node() {
+            //     if let RenderReturn::Ready(node) = root
+            //         self.drop_scope_inner(node)
+            //     }
+            // }
         }
 
         let scope = &mut self.scopes[id];

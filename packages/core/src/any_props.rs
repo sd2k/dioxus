@@ -2,7 +2,6 @@ use std::{marker::PhantomData, panic::AssertUnwindSafe};
 
 use crate::{
     innerlude::Scoped,
-    nodes::{ComponentReturn, RenderReturn},
     scopes::{Scope, ScopeState},
     Element,
 };
@@ -14,23 +13,19 @@ use crate::{
 /// This should not be implemented outside this module
 pub(crate) unsafe trait AnyProps<'a> {
     fn props_ptr(&self) -> *const ();
-    fn render(&'a self, bump: &'a ScopeState) -> RenderReturn<'a>;
+    fn render(&'a self, bump: &'a ScopeState) -> Element<'a>;
     unsafe fn memoize(&self, other: &dyn AnyProps) -> bool;
 }
 
-pub(crate) struct VProps<'a, P, A, F: ComponentReturn<'a, A> = Element<'a>> {
-    pub render_fn: fn(Scope<'a, P>) -> F,
+pub(crate) struct VProps<'a, P> {
+    pub render_fn: fn(Scope<'a, P>) -> Element<'a>,
     pub memo: unsafe fn(&P, &P) -> bool,
     pub props: P,
-    _marker: PhantomData<A>,
 }
 
-impl<'a, P, A, F> VProps<'a, P, A, F>
-where
-    F: ComponentReturn<'a, A>,
-{
+impl<'a, P> VProps<'a, P> {
     pub(crate) fn new(
-        render_fn: fn(Scope<'a, P>) -> F,
+        render_fn: fn(Scope<'a, P>) -> Element<'a>,
         memo: unsafe fn(&P, &P) -> bool,
         props: P,
     ) -> Self {
@@ -38,15 +33,11 @@ where
             render_fn,
             memo,
             props,
-            _marker: PhantomData,
         }
     }
 }
 
-unsafe impl<'a, P, A, F> AnyProps<'a> for VProps<'a, P, A, F>
-where
-    F: ComponentReturn<'a, A>,
-{
+unsafe impl<'a, P> AnyProps<'a> for VProps<'a, P> {
     fn props_ptr(&self) -> *const () {
         &self.props as *const _ as *const ()
     }
@@ -61,7 +52,7 @@ where
         (self.memo)(real_us, real_other)
     }
 
-    fn render(&'a self, cx: &'a ScopeState) -> RenderReturn<'a> {
+    fn render(&'a self, cx: &'a ScopeState) -> Element<'a> {
         let res = std::panic::catch_unwind(AssertUnwindSafe(move || {
             // Call the render function directly
             let scope: &mut Scoped<P> = cx.bump().alloc(Scoped {
@@ -69,12 +60,10 @@ where
                 scope: cx,
             });
 
-            (self.render_fn)(scope).into_return(cx)
+            todo!()
+            // (self.render_fn)(scope).into_return(cx)
         }));
 
-        match res {
-            Ok(e) => e,
-            Err(_) => RenderReturn::default(),
-        }
+        todo!()
     }
 }
