@@ -30,7 +30,7 @@ pub fn Input<'a>(cx: Scope<'a, InputProps<'a>>) -> Element<'a> {
     cx.render(match cx.props.r#type {
         Some("checkbox") => {
             rsx! {
-                CheckBox{
+                CheckBox {
                     raw_oninput: cx.props.oninput.as_ref(),
                     value: cx.props.value,
                     width: cx.props.width,
@@ -41,7 +41,7 @@ pub fn Input<'a>(cx: Scope<'a, InputProps<'a>>) -> Element<'a> {
         }
         Some("range") => {
             rsx! {
-                Slider{
+                Slider {
                     raw_oninput: cx.props.oninput.as_ref(),
                     value: cx.props.value,
                     width: cx.props.width,

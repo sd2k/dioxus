@@ -1,4 +1,3 @@
-use dioxus::core::RenderReturn;
 use dioxus::prelude::*;
 use dioxus_tui::DioxusElementToNodeId;
 use dioxus_tui::Query;
@@ -19,7 +18,7 @@ fn app(cx: Scope) -> Element {
             width: "100%",
             background_color: "hsl({hue}, 70%, {brightness}%)",
             onmousemove: move |evt| {
-                if let RenderReturn::Ready(node) = cx.root_node() {
+                if let Some(node) = cx.root_node() {
                     if let Some(id) = node.root_ids.get(0){
                         let node = tui_query.get(mapping.get_node_id(id).unwrap());
                         let Size{width, height} = node.size().unwrap();

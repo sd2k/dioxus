@@ -66,7 +66,7 @@ impl WebsysDom {
         last_node_was_static_text: &mut bool,
     ) -> Result<(), RehydrationError> {
         let vnode = match scope.root_node() {
-            dioxus_core::RenderReturn::Ready(ready) => ready,
+            Some(ready) => ready,
             _ => return Err(VNodeNotInitialized),
         };
         self.rehydrate_vnode(

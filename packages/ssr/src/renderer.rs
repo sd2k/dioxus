@@ -1,6 +1,6 @@
 use super::cache::Segment;
 use crate::cache::StringCache;
-use dioxus_core::{prelude::*, AttributeValue, DynamicNode, RenderReturn};
+use dioxus_core::{prelude::*, AttributeValue, DynamicNode};
 use std::collections::HashMap;
 use std::fmt::Write;
 use std::sync::Arc;
@@ -51,7 +51,7 @@ impl Renderer {
     ) -> std::fmt::Result {
         // We should never ever run into async or errored nodes in SSR
         // Error boundaries and suspense boundaries will convert these to sync
-        if let RenderReturn::Ready(node) = dom.get_scope(scope).unwrap().root_node() {
+        if let Some(node) = dom.get_scope(scope).unwrap().root_node() {
             self.render_template(buf, dom, node)?
         };
 
@@ -106,9 +106,7 @@ impl Renderer {
                             let scope = dom.get_scope(id).unwrap();
                             let node = scope.root_node();
                             match node {
-                                RenderReturn::Ready(node) => {
-                                    self.render_template(buf, dom, node)?
-                                }
+                                Some(node) => self.render_template(buf, dom, node)?,
                                 _ => todo!(
                                     "generally, scopes should be sync, only if being traversed"
                                 ),
