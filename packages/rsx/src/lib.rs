@@ -136,7 +136,7 @@ impl<'a> TemplateRenderer<'a> {
 
         Some(Template {
             name: location,
-            roots: intern(roots.as_slice()),
+            roots: intern(roots.into_boxed_slice()),
             node_paths: intern(
                 context
                     .node_paths
@@ -212,8 +212,8 @@ impl<'a> ToTokens for TemplateRenderer<'a> {
                 key: #key_tokens,
                 template: std::cell::Cell::new(TEMPLATE),
                 root_ids: Default::default(),
-                dynamic_nodes: __cx.bump().alloc([ #( #node_printer ),* ]),
-                dynamic_attrs: __cx.bump().alloc([ #( #dyn_attr_printer ),* ]),
+                dynamic_nodes: vec![ #( #node_printer ),* ],
+                dynamic_attrs: vec![ #( #dyn_attr_printer ),* ],
             }
         });
     }
@@ -386,8 +386,8 @@ impl<'a> DynamicContext<'a> {
                 Some(TemplateNode::Element {
                     tag,
                     namespace,
-                    attrs: intern(static_attrs.into_boxed_slice()),
-                    children: intern(children.as_slice()),
+                    attrs: static_attrs,
+                    children: children,
                 })
             }
 

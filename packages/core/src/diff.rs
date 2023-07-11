@@ -30,7 +30,7 @@ impl<'b> VirtualDom {
                 .try_load_node()
                 .expect("Call rebuild before diffing");
 
-            use RenderReturn::{Aborted, Pending, Ready};
+            use RenderReturn::{Aborted, Ready};
 
             match (old, new) {
                 // Normal pathway
@@ -43,19 +43,12 @@ impl<'b> VirtualDom {
                 (Aborted(l), Aborted(r)) => r.id.set(l.id.get()),
 
                 // Becomes async, do nothing while we wait
-                (Ready(_nodes), Pending(_fut)) => self.diff_ok_to_async(_nodes, scope),
 
                 // Placeholder becomes something
                 // We should also clear the error now
                 (Aborted(l), Ready(r)) => self.replace_placeholder(l, [r]),
 
-                (Aborted(_), Pending(_)) => todo!("async should not resolve here"),
-                (Pending(_), Ready(_)) => todo!("async should not resolve here"),
-                (Pending(_), Aborted(_)) => todo!("async should not resolve here"),
-                (Pending(_), Pending(_)) => {
-                    // All suspense should resolve before we diff it again
-                    panic!("Should not roll from suspense to suspense.");
-                }
+                _ => todo!(),
             };
         }
         self.scope_stack.pop();
@@ -167,7 +160,7 @@ impl<'b> VirtualDom {
             (Fragment(left), Fragment(right)) => self.diff_non_empty_fragment(left, right),
             (Placeholder(left), Placeholder(right)) => right.id.set(left.id.get()),
             (Component(left), Component(right)) => self.diff_vcomponent(left, right, node, idx),
-            (Placeholder(left), Fragment(right)) => self.replace_placeholder(left, *right),
+            (Placeholder(left), Fragment(right)) => self.replace_placeholder(left, right.iter()),
             (Fragment(left), Placeholder(right)) => self.node_to_placeholder(left, right),
             _ => todo!("This is an usual custom case for dynamic nodes. We don't know how to handle it yet."),
         };
@@ -306,7 +299,7 @@ impl<'b> VirtualDom {
     ///
     /// This just moves the ID of the old node over to the new node, and then sets the text of the new node if it's
     /// different.
-    fn diff_vtext(&mut self, left: &'b VText<'b>, right: &'b VText<'b>, node: &'b VNode<'b>) {
+    fn diff_vtext(&mut self, left: &'b VText, right: &'b VText, node: &'b VNode<'b>) {
         let id = left
             .id
             .get()
@@ -314,7 +307,7 @@ impl<'b> VirtualDom {
 
         right.id.set(Some(id));
         if left.value != right.value {
-            let value = unsafe { std::mem::transmute(right.value) };
+            let value = unsafe { std::mem::transmute(right.value.as_str()) };
             self.mutations.push(Mutation::SetText { id, value });
         }
     }
@@ -897,7 +890,7 @@ impl<'b> VirtualDom {
         }
     }
 
-    fn remove_dynamic_node(&mut self, node: &DynamicNode, gen_muts: bool) {
+    fn remove_dynamic_node(&mut self, node: &'b DynamicNode<'b>, gen_muts: bool) {
         match node {
             Component(comp) => self.remove_component_node(comp, gen_muts),
             Text(t) => self.remove_text_node(t, gen_muts),

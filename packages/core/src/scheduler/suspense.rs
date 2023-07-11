@@ -50,9 +50,5 @@ pub struct SuspenseHandle {
 }
 
 impl ArcWake for SuspenseHandle {
-    fn wake_by_ref(arc_self: &Arc<Self>) {
-        _ = arc_self
-            .tx
-            .unbounded_send(SchedulerMsg::SuspenseNotified(arc_self.id));
-    }
+    fn wake_by_ref(arc_self: &Arc<Self>) {}
 }

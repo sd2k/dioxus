@@ -18,9 +18,6 @@ pub(crate) enum SchedulerMsg {
 
     /// A task has woken and needs to be progressed
     TaskNotified(TaskId),
-
-    /// A task has woken and needs to be progressed
-    SuspenseNotified(SuspenseId),
 }
 
 use std::{cell::RefCell, rc::Rc};

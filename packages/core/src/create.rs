@@ -453,7 +453,7 @@ impl<'b> VirtualDom {
     fn create_dynamic_text(
         &mut self,
         template: &'b VNode<'b>,
-        text: &'b VText<'b>,
+        text: &'b VText,
         idx: usize,
     ) -> usize {
         // Allocate a dynamic element reference for this text node
@@ -463,7 +463,7 @@ impl<'b> VirtualDom {
         text.id.set(Some(new_id));
 
         // Safety: we promise not to re-alias this text later on after committing it to the mutation
-        let value = unsafe { std::mem::transmute(text.value) };
+        let value = unsafe { std::mem::transmute(text.value.as_str()) };
 
         // Add the mutation to the list
         self.mutations.push(HydrateText {
@@ -514,7 +514,6 @@ impl<'b> VirtualDom {
         match unsafe { self.run_scope(scope).extend_lifetime_ref() } {
             Ready(t) => self.mount_component(scope, template, t, idx),
             Aborted(t) => self.mount_aborted(template, t),
-            Pending(_) => self.mount_async(template, idx, scope),
         }
     }
 

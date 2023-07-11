@@ -88,8 +88,8 @@ pub mod prelude {
     };
 }
 
-pub mod exports {
-    //! Important dependencies that are used by the rest of the library
-    //! Feel free to just add the dependencies in your own Crates.toml
-    pub use bumpalo;
-}
+// pub mod exports {
+//     //! Important dependencies that are used by the rest of the library
+//     //! Feel free to just add the dependencies in your own Crates.toml
+//     pub use bumpalo;
+// }

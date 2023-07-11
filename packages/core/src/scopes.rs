@@ -9,7 +9,6 @@ use crate::{
     nodes::{ComponentReturn, IntoAttributeValue, IntoDynNode, RenderReturn},
     AnyValue, Attribute, AttributeValue, Element, Event, Properties, TaskId,
 };
-use bumpalo::{boxed::Box as BumpBox, Bump};
 use bumpslab::{BumpSlab, Slot};
 use rustc_hash::FxHashSet;
 use slab::{Slab, VacantEntry};
@@ -212,17 +211,6 @@ impl<'src> ScopeState {
     /// This can be used as a helpful diagnostic when debugging hooks/renders, etc
     pub fn generation(&self) -> usize {
         self.render_cnt.get()
-    }
-
-    /// Get a handle to the currently active bump arena for this Scope
-    ///
-    /// This is a bump memory allocator. Be careful using this directly since the contents will be wiped on the next render.
-    /// It's easy to leak memory here since the drop implementation will not be called for any objects allocated in this arena.
-    ///
-    /// If you need to allocate items that need to be dropped, use bumpalo's box.
-    pub fn bump(&self) -> &Bump {
-        // note that this is actually the previous frame since we use that as scratch space while the component is rendering
-        self.previous_frame().bump()
     }
 
     /// Get a handle to the currently active head node arena for this Scope
@@ -472,7 +460,7 @@ impl<'src> ScopeState {
         let element = rsx.call(self);
 
         let mut listeners = self.attributes_to_drop.borrow_mut();
-        for attr in element.dynamic_attrs {
+        for attr in element.dynamic_attrs.iter() {
             match attr.value {
                 AttributeValue::Any(_) | AttributeValue::Listener(_) => {
                     let unbounded = unsafe { std::mem::transmute(attr as *const Attribute) };
@@ -484,7 +472,7 @@ impl<'src> ScopeState {
         }
 
         let mut props = self.borrowed_props.borrow_mut();
-        for node in element.dynamic_nodes {
+        for node in element.dynamic_nodes.iter() {
             if let DynamicNode::Component(comp) = node {
                 if !comp.static_props {
                     let unbounded = unsafe { std::mem::transmute(comp as *const VComponent) };
@@ -499,7 +487,7 @@ impl<'src> ScopeState {
     /// Create a dynamic text node using [`Arguments`] and the [`ScopeState`]'s internal [`Bump`] allocator
     pub fn text_node(&'src self, args: Arguments) -> DynamicNode<'src> {
         DynamicNode::Text(VText {
-            value: self.raw_text(args),
+            value: format!("{}", args),
             id: Default::default(),
         })
     }
@@ -508,12 +496,13 @@ impl<'src> ScopeState {
     ///
     /// Uses the currently active [`Bump`] allocator
     pub fn raw_text(&'src self, args: Arguments) -> &'src str {
-        args.as_str().unwrap_or_else(|| {
-            use bumpalo::core_alloc::fmt::Write;
-            let mut str_buf = bumpalo::collections::String::new_in(self.bump());
-            str_buf.write_fmt(args).unwrap();
-            str_buf.into_bump_str()
-        })
+        todo!()
+        // args.as_str().unwrap_or_else(|| {
+        //     use bumpalo::core_alloc::fmt::Write;
+        //     let mut str_buf = bumpalo::collections::String::new_in(self.bump());
+        //     str_buf.write_fmt(args).unwrap();
+        //     str_buf.into_bump_str()
+        // })
     }
 
     /// Convert any item that implements [`IntoDynNode`] into a [`DynamicNode`] using the internal [`Bump`] allocator
@@ -537,7 +526,7 @@ impl<'src> ScopeState {
             namespace,
             volatile,
             mounted_element: Default::default(),
-            value: value.into_value(self.bump()),
+            value: value.into_value(self),
         }
     }
 
@@ -581,10 +570,11 @@ impl<'src> ScopeState {
 
     /// Create a new [`EventHandler`] from an [`FnMut`]
     pub fn event_handler<T>(&'src self, f: impl FnMut(T) + 'src) -> EventHandler<'src, T> {
-        let handler: &mut dyn FnMut(T) = self.bump().alloc(f);
-        let caller = unsafe { BumpBox::from_raw(handler as *mut dyn FnMut(T)) };
-        let callback = RefCell::new(Some(caller));
-        EventHandler { callback }
+        todo!()
+        // let handler: &mut dyn FnMut(T) = self.bump().alloc(f);
+        // let caller = unsafe { BumpBox::from_raw(handler as *mut dyn FnMut(T)) };
+        // let callback = RefCell::new(Some(caller));
+        // EventHandler { callback }
     }
 
     /// Create a new [`AttributeValue`] with the listener variant from a callback
@@ -598,29 +588,24 @@ impl<'src> ScopeState {
         // This is the suggested way to build a bumpbox
         //
         // In theory, we could just use regular boxes
-        let boxed: BumpBox<'src, dyn FnMut(_) + 'src> = unsafe {
-            BumpBox::from_raw(self.bump().alloc(move |event: Event<dyn Any>| {
-                if let Ok(data) = event.data.downcast::<T>() {
-                    callback(Event {
-                        propagates: event.propagates,
-                        data,
-                    });
-                }
-            }))
-        };
+        // let boxed: BumpBox<'src, dyn FnMut(_) + 'src> = unsafe {
+        //     BumpBox::from_raw(self.bump().alloc(move |event: Event<dyn Any>| {
+        //         if let Ok(data) = event.data.downcast::<T>() {
+        //             callback(Event {
+        //                 propagates: event.propagates,
+        //                 data,
+        //             });
+        //         }
+        //     }))
+        // };
 
-        AttributeValue::Listener(RefCell::new(Some(boxed)))
+        // AttributeValue::Listener(RefCell::new(Some(boxed)))
+        todo!()
     }
 
     /// Create a new [`AttributeValue`] with a value that implements [`AnyValue`]
     pub fn any_value<T: AnyValue>(&'src self, value: T) -> AttributeValue<'src> {
-        // safety: there's no other way to create a dynamicly-dispatched bump box other than alloc + from-raw
-        // This is the suggested way to build a bumpbox
-        //
-        // In theory, we could just use regular boxes
-        let boxed: BumpBox<'src, dyn AnyValue> =
-            unsafe { BumpBox::from_raw(self.bump().alloc(value)) };
-        AttributeValue::Any(RefCell::new(Some(boxed)))
+        AttributeValue::Any(RefCell::new(Some(Box::new(value))))
     }
 
     /// Inject an error into the nearest error boundary and quit rendering

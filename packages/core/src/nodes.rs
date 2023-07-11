@@ -1,13 +1,13 @@
 use crate::{
     any_props::AnyProps, arena::ElementId, Element, Event, LazyNodes, ScopeId, ScopeState,
 };
-use bumpalo::boxed::Box as BumpBox;
-use bumpalo::Bump;
+
 use std::{
     any::{Any, TypeId},
     cell::{Cell, RefCell, UnsafeCell},
     fmt::{Arguments, Debug},
     future::Future,
+    rc::Rc,
 };
 
 pub type TemplateId = &'static str;
@@ -28,9 +28,6 @@ pub enum RenderReturn<'a> {
     /// In its place we've produced a placeholder to locate its spot in the dom when
     /// it recovers.
     Aborted(VPlaceholder),
-
-    /// An ongoing future that will resolve to a [`Element`]
-    Pending(BumpBox<'a, dyn Future<Output = Element<'a>> + 'a>),
 }
 
 impl<'a> Default for RenderReturn<'a> {
@@ -43,7 +40,7 @@ impl<'a> Default for RenderReturn<'a> {
 ///
 /// The dynamic parts of the template are stored separately from the static parts. This allows faster diffing by skipping
 /// static parts of the template.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct VNode<'a> {
     /// The key given to the root of this template.
     ///
@@ -61,10 +58,10 @@ pub struct VNode<'a> {
     pub root_ids: BoxedCellSlice,
 
     /// The dynamic parts of the template
-    pub dynamic_nodes: &'a [DynamicNode<'a>],
+    pub dynamic_nodes: Vec<DynamicNode<'a>>,
 
     /// The dynamic parts of the template
-    pub dynamic_attrs: &'a [Attribute<'a>],
+    pub dynamic_attrs: Vec<Attribute<'a>>,
 }
 
 // Saftey: There is no way to get references to the internal data of this struct so no refrences will be invalidated by mutating the data with a immutable reference (The same principle behind Cell)
@@ -173,8 +170,8 @@ impl<'a> VNode<'a> {
             key: None,
             parent: None,
             root_ids: BoxedCellSlice::default(),
-            dynamic_nodes: &[],
-            dynamic_attrs: &[],
+            dynamic_nodes: vec![],
+            dynamic_attrs: vec![],
             template: Cell::new(Template {
                 name: "dioxus-empty",
                 roots: &[],
@@ -187,7 +184,7 @@ impl<'a> VNode<'a> {
     /// Load a dynamic root at the given index
     ///
     /// Returns [`None`] if the root is actually a static node (Element/Text)
-    pub fn dynamic_root(&self, idx: usize) -> Option<&'a DynamicNode<'a>> {
+    pub fn dynamic_root(&'a self, idx: usize) -> Option<&'a DynamicNode<'a>> {
         match &self.template.get().roots[idx] {
             TemplateNode::Element { .. } | TemplateNode::Text { text: _ } => None,
             TemplateNode::Dynamic { id } | TemplateNode::DynamicText { id } => {
@@ -310,7 +307,7 @@ impl<'a> Template<'a> {
 /// A statically known node in a layout.
 ///
 /// This can be created at compile time, saving the VirtualDom time when diffing the tree
-#[derive(Debug, Clone, Copy, PartialEq, Hash, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq, PartialOrd, Ord)]
 #[cfg_attr(
     feature = "serialize",
     derive(serde::Serialize, serde::Deserialize),
@@ -330,21 +327,15 @@ pub enum TemplateNode<'a> {
         ///
         /// In HTML, this would be a valid URI that defines a namespace for all elements below it
         /// SVG is an example of this namespace
-        #[cfg_attr(
-            feature = "serialize",
-            serde(deserialize_with = "deserialize_option_leaky")
-        )]
         namespace: Option<&'a str>,
 
         /// A list of possibly dynamic attribues for this element
         ///
         /// An attribute on a DOM node, such as `id="my-thing"` or `href="https://example.com"`.
-        #[cfg_attr(feature = "serialize", serde(deserialize_with = "deserialize_leaky"))]
-        attrs: &'a [TemplateAttribute<'a>],
+        attrs: Vec<TemplateAttribute<'a>>,
 
         /// A list of template nodes that define another set of template nodes
-        #[cfg_attr(feature = "serialize", serde(deserialize_with = "deserialize_leaky"))]
-        children: &'a [TemplateNode<'a>],
+        children: Vec<TemplateNode<'a>>,
     },
 
     /// This template node is just a piece of static text
@@ -383,7 +374,7 @@ pub enum DynamicNode<'a> {
     Component(VComponent<'a>),
 
     /// A text node
-    Text(VText<'a>),
+    Text(VText),
 
     /// A placeholder
     ///
@@ -396,7 +387,7 @@ pub enum DynamicNode<'a> {
     ///
     /// Note that this is not a list of dynamic nodes. These must be VNodes and created through conditional rendering
     /// or iterators.
-    Fragment(&'a [VNode<'a>]),
+    Fragment(Vec<VNode<'a>>),
 }
 
 impl Default for DynamicNode<'_> {
@@ -440,9 +431,9 @@ impl<'a> std::fmt::Debug for VComponent<'a> {
 
 /// An instance of some text, mounted to the DOM
 #[derive(Debug)]
-pub struct VText<'a> {
+pub struct VText {
     /// The actual text itself
-    pub value: &'a str,
+    pub value: String,
 
     /// The ID of this node in the real DOM
     pub id: Cell<Option<ElementId>>,
@@ -456,7 +447,7 @@ pub struct VPlaceholder {
 }
 
 /// An attribute of the TemplateNode, created at compile time
-#[derive(Debug, PartialEq, Hash, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Hash, Eq, PartialOrd, Ord)]
 #[cfg_attr(
     feature = "serialize",
     derive(serde::Serialize, serde::Deserialize),
@@ -515,7 +506,7 @@ pub struct Attribute<'a> {
 /// variant.
 pub enum AttributeValue<'a> {
     /// Text attribute
-    Text(&'a str),
+    Text(String),
 
     /// A float
     Float(f64),
@@ -530,13 +521,13 @@ pub enum AttributeValue<'a> {
     Listener(RefCell<Option<ListenerCb<'a>>>),
 
     /// An arbitrary value that implements PartialEq and is static
-    Any(RefCell<Option<BumpBox<'a, dyn AnyValue>>>),
+    Any(RefCell<Option<Box<dyn AnyValue>>>),
 
     /// A "none" value, resulting in the removal of an attribute from the dom
     None,
 }
 
-pub type ListenerCb<'a> = BumpBox<'a, dyn FnMut(Event<dyn Any>) + 'a>;
+pub type ListenerCb<'a> = Box<dyn FnMut(Event<dyn Any>) + 'a>;
 
 /// Any of the built-in values that the Dioxus VirtualDom supports as dynamic attributes on elements that are borrowed
 ///
@@ -702,18 +693,6 @@ impl<'a> ComponentReturn<'a> for Element<'a> {
     }
 }
 
-#[doc(hidden)]
-pub struct AsyncMarker;
-impl<'a, F> ComponentReturn<'a, AsyncMarker> for F
-where
-    F: Future<Output = Element<'a>> + 'a,
-{
-    fn into_return(self, cx: &'a ScopeState) -> RenderReturn<'a> {
-        let f: &mut dyn Future<Output = Element<'a>> = cx.bump().alloc(self);
-        RenderReturn::Pending(unsafe { BumpBox::from_raw(f) })
-    }
-}
-
 impl<'a> RenderReturn<'a> {
     pub(crate) unsafe fn extend_lifetime_ref<'c>(&self) -> &'c RenderReturn<'c> {
         unsafe { std::mem::transmute(self) }
@@ -738,7 +717,7 @@ impl<'a> IntoDynNode<'a> for () {
 }
 impl<'a> IntoDynNode<'a> for VNode<'a> {
     fn into_vnode(self, _cx: &'a ScopeState) -> DynamicNode<'a> {
-        DynamicNode::Fragment(_cx.bump().alloc([self]))
+        DynamicNode::Fragment(vec![self])
     }
 }
 
@@ -760,7 +739,7 @@ impl<'a, T: IntoDynNode<'a>> IntoDynNode<'a> for Option<T> {
 impl<'a> IntoDynNode<'a> for &Element<'a> {
     fn into_vnode(self, _cx: &'a ScopeState) -> DynamicNode<'a> {
         match self.as_ref() {
-            Some(val) => val.clone().into_vnode(_cx),
+            Some(val) => todo!(),
             _ => DynamicNode::default(),
         }
     }
@@ -768,14 +747,14 @@ impl<'a> IntoDynNode<'a> for &Element<'a> {
 
 impl<'a, 'b> IntoDynNode<'a> for LazyNodes<'a, 'b> {
     fn into_vnode(self, cx: &'a ScopeState) -> DynamicNode<'a> {
-        DynamicNode::Fragment(cx.bump().alloc([self.call(cx)]))
+        DynamicNode::Fragment(vec![self.call(cx)])
     }
 }
 
 impl<'a, 'b> IntoDynNode<'b> for &'a str {
     fn into_vnode(self, cx: &'b ScopeState) -> DynamicNode<'b> {
         DynamicNode::Text(VText {
-            value: bumpalo::collections::String::from_str_in(self, cx.bump()).into_bump_str(),
+            value: String::from(self).into(),
             id: Default::default(),
         })
     }
@@ -784,7 +763,7 @@ impl<'a, 'b> IntoDynNode<'b> for &'a str {
 impl IntoDynNode<'_> for String {
     fn into_vnode(self, cx: &ScopeState) -> DynamicNode {
         DynamicNode::Text(VText {
-            value: cx.bump().alloc(self),
+            value: self,
             id: Default::default(),
         })
     }
@@ -798,14 +777,14 @@ impl<'b> IntoDynNode<'b> for Arguments<'_> {
 
 impl<'a> IntoDynNode<'a> for &'a VNode<'a> {
     fn into_vnode(self, _cx: &'a ScopeState) -> DynamicNode<'a> {
-        DynamicNode::Fragment(_cx.bump().alloc([VNode {
+        DynamicNode::Fragment(vec![VNode {
             parent: self.parent,
             template: self.template.clone(),
             root_ids: self.root_ids.clone(),
             key: self.key,
             dynamic_nodes: self.dynamic_nodes,
             dynamic_attrs: self.dynamic_attrs,
-        }]))
+        }])
     }
 }
 
@@ -839,13 +818,14 @@ where
     I: IntoTemplate<'a>,
 {
     fn into_vnode(self, cx: &'a ScopeState) -> DynamicNode<'a> {
-        let mut nodes = bumpalo::collections::Vec::new_in(cx.bump());
+        let mut nodes = Vec::new();
 
         nodes.extend(self.into_iter().map(|node| node.into_template(cx)));
 
-        match nodes.into_bump_slice() {
-            children if children.is_empty() => DynamicNode::default(),
-            children => DynamicNode::Fragment(children),
+        if nodes.is_empty() {
+            DynamicNode::default()
+        } else {
+            DynamicNode::Fragment(nodes)
         }
     }
 }
@@ -853,56 +833,58 @@ where
 /// A value that can be converted into an attribute value
 pub trait IntoAttributeValue<'a> {
     /// Convert into an attribute value
-    fn into_value(self, bump: &'a Bump) -> AttributeValue<'a>;
+    fn into_value(self, bump: &'a ScopeState) -> AttributeValue<'a>;
 }
 
 impl<'a> IntoAttributeValue<'a> for AttributeValue<'a> {
-    fn into_value(self, _: &'a Bump) -> AttributeValue<'a> {
+    fn into_value(self, _: &'a ScopeState) -> AttributeValue<'a> {
         self
     }
 }
 
 impl<'a> IntoAttributeValue<'a> for &'a str {
-    fn into_value(self, _: &'a Bump) -> AttributeValue<'a> {
-        AttributeValue::Text(self)
+    fn into_value(self, _: &'a ScopeState) -> AttributeValue<'a> {
+        todo!()
+        // AttributeValue::Text(self)
     }
 }
 
 impl<'a> IntoAttributeValue<'a> for f64 {
-    fn into_value(self, _: &'a Bump) -> AttributeValue<'a> {
+    fn into_value(self, _: &'a ScopeState) -> AttributeValue<'a> {
         AttributeValue::Float(self)
     }
 }
 
 impl<'a> IntoAttributeValue<'a> for i64 {
-    fn into_value(self, _: &'a Bump) -> AttributeValue<'a> {
+    fn into_value(self, _: &'a ScopeState) -> AttributeValue<'a> {
         AttributeValue::Int(self)
     }
 }
 
 impl<'a> IntoAttributeValue<'a> for bool {
-    fn into_value(self, _: &'a Bump) -> AttributeValue<'a> {
+    fn into_value(self, _: &'a ScopeState) -> AttributeValue<'a> {
         AttributeValue::Bool(self)
     }
 }
 
 impl<'a> IntoAttributeValue<'a> for Arguments<'_> {
-    fn into_value(self, bump: &'a Bump) -> AttributeValue<'a> {
-        use bumpalo::core_alloc::fmt::Write;
-        let mut str_buf = bumpalo::collections::String::new_in(bump);
-        str_buf.write_fmt(self).unwrap();
-        AttributeValue::Text(str_buf.into_bump_str())
+    fn into_value(self, bump: &'a ScopeState) -> AttributeValue<'a> {
+        // use bumpalo::core_alloc::fmt::Write;
+        // let mut str_buf = bumpalo::collections::String::new_in(bump);
+        // str_buf.write_fmt(self).unwrap();
+        // AttributeValue::Text(str_buf.into_bump_str())
+        todo!()
     }
 }
 
-impl<'a> IntoAttributeValue<'a> for BumpBox<'a, dyn AnyValue> {
-    fn into_value(self, _: &'a Bump) -> AttributeValue<'a> {
-        AttributeValue::Any(RefCell::new(Some(self)))
-    }
-}
+// impl<'a> IntoAttributeValue<'a> for Box<dyn AnyValue> {
+//     fn into_value(self, _: &'a ScopeState) -> AttributeValue<'a> {
+//         AttributeValue::Any(RefCell::new(Some(self)))
+//     }
+// }
 
 impl<'a, T: IntoAttributeValue<'a>> IntoAttributeValue<'a> for Option<T> {
-    fn into_value(self, bump: &'a Bump) -> AttributeValue<'a> {
+    fn into_value(self, bump: &'a ScopeState) -> AttributeValue<'a> {
         match self {
             Some(val) => val.into_value(bump),
             None => AttributeValue::None,

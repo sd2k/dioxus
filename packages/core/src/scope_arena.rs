@@ -59,7 +59,8 @@ impl VirtualDom {
         self.ensure_drop_safety(scope_id);
 
         let mut new_nodes = unsafe {
-            self.scopes[scope_id].previous_frame().bump_mut().reset();
+            // self.scopes[scope_id].previous_frame().bump_mut().reset();
+            todo!();
 
             let scope = &self.scopes[scope_id];
 
@@ -72,67 +73,13 @@ impl VirtualDom {
             props.render(scope).extend_lifetime()
         };
 
-        // immediately resolve futures that can be resolved
-        if let RenderReturn::Pending(task) = &mut new_nodes {
-            let mut leaves = self.scheduler.leaves.borrow_mut();
-
-            let entry = leaves.vacant_entry();
-            let suspense_id = SuspenseId(entry.key());
-
-            let leaf = SuspenseLeaf {
-                scope_id,
-                task: task.as_mut(),
-                notified: Default::default(),
-                waker: futures_util::task::waker(Arc::new(SuspenseHandle {
-                    id: suspense_id,
-                    tx: self.scheduler.sender.clone(),
-                })),
-            };
-
-            let mut cx = Context::from_waker(&leaf.waker);
-
-            // safety: the task is already pinned in the bump arena
-            let mut pinned = unsafe { Pin::new_unchecked(task.as_mut()) };
-
-            // Keep polling until either we get a value or the future is not ready
-            loop {
-                match pinned.poll_unpin(&mut cx) {
-                    // If nodes are produced, then set it and we can break
-                    Poll::Ready(nodes) => {
-                        new_nodes = match nodes {
-                            Some(nodes) => RenderReturn::Ready(nodes),
-                            None => RenderReturn::default(),
-                        };
-
-                        break;
-                    }
-
-                    // If no nodes are produced but the future woke up immediately, then try polling it again
-                    // This circumvents things like yield_now, but is important is important when rendering
-                    // components that are just a stream of immediately ready futures
-                    _ if leaf.notified.get() => {
-                        leaf.notified.set(false);
-                        continue;
-                    }
-
-                    // If no nodes are produced, then we need to wait for the future to be woken up
-                    // Insert the future into fiber leaves and break
-                    _ => {
-                        entry.insert(leaf);
-                        self.collected_leaves.push(suspense_id);
-                        break;
-                    }
-                };
-            }
-        };
-
         let scope = &self.scopes[scope_id];
 
         // We write on top of the previous frame and then make it the current by pushing the generation forward
         let frame = scope.previous_frame();
 
         // set the new head of the bump frame
-        let allocated = &*frame.bump().alloc(new_nodes);
+        let allocated = Box::into_raw(Box::new(new_nodes));
         frame.node.set(allocated);
 
         // And move the render generation forward by one
@@ -145,6 +92,6 @@ impl VirtualDom {
         });
 
         // rebind the lifetime now that its stored internally
-        unsafe { allocated.extend_lifetime_ref() }
+        unsafe { &*allocated }
     }
 }

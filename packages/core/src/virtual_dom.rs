@@ -485,7 +485,6 @@ impl VirtualDom {
                 Some(msg) => match msg {
                     SchedulerMsg::Immediate(id) => self.mark_dirty(id),
                     SchedulerMsg::TaskNotified(task) => self.handle_task_wakeup(task),
-                    SchedulerMsg::SuspenseNotified(id) => self.handle_suspense_wakeup(id),
                 },
 
                 // If they're not ready, then we should wait for them to be ready
@@ -513,7 +512,6 @@ impl VirtualDom {
             match msg {
                 SchedulerMsg::Immediate(id) => self.mark_dirty(id),
                 SchedulerMsg::TaskNotified(task) => self.handle_task_wakeup(task),
-                SchedulerMsg::SuspenseNotified(id) => self.handle_suspense_wakeup(id),
             }
         }
     }
@@ -574,7 +572,6 @@ impl VirtualDom {
             }
             // If an error occurs, we should try to render the default error component and context where the error occured
             RenderReturn::Aborted(_placeholder) => panic!("Cannot catch errors during rebuild"),
-            RenderReturn::Pending(_) => unreachable!("Root scope cannot be an async component"),
         }
 
         self.finalize()
