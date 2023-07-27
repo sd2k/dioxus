@@ -48,7 +48,7 @@ pub trait Properties: Sized {
     /// # Safety
     /// The user must know if their props are static, but if they make a mistake, UB happens
     /// Therefore it's unsafe to memoize.
-    unsafe fn memoize(&self, other: &Self) -> bool;
+    fn memoize(&self, other: &Self) -> bool;
 }
 
 impl Properties for () {
@@ -57,7 +57,7 @@ impl Properties for () {
     fn builder() -> Self::Builder {
         EmptyBuilder {}
     }
-    unsafe fn memoize(&self, _other: &Self) -> bool {
+    fn memoize(&self, _other: &Self) -> bool {
         true
     }
 }

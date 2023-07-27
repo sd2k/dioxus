@@ -4,29 +4,29 @@ use crate::{
     scopes::{Scope, ScopeState},
     Element,
 };
-use std::panic::AssertUnwindSafe;
+use std::{any::Any, panic::AssertUnwindSafe};
 
 /// A trait that essentially allows VComponentProps to be used generically
 ///
 /// # Safety
 ///
 /// This should not be implemented outside this module
-pub(crate) unsafe trait AnyProps<'a> {
-    fn props_ptr(&self) -> *const ();
-    fn render(&'a self, bump: &'a ScopeState) -> RenderReturn<'a>;
-    unsafe fn memoize(&self, other: &dyn AnyProps) -> bool;
+pub(crate) trait AnyProps<'a> {
+    fn render(&'a self, bump: &'a ScopeState) -> RenderReturn;
+    fn memoize(&self, other: &dyn AnyProps) -> bool;
+    fn props(&self) -> &dyn Any;
 }
 
-pub(crate) struct VProps<'a, P> {
+pub(crate) struct VProps<'a, P: 'static> {
     pub render_fn: fn(Scope<'a, P>) -> Element<'a>,
-    pub memo: unsafe fn(&P, &P) -> bool,
+    pub memo: fn(&P, &P) -> bool,
     pub props: P,
 }
 
-impl<'a, P> VProps<'a, P> {
+impl<'a, P: 'static> VProps<'a, P> {
     pub(crate) fn new(
         render_fn: fn(Scope<'a, P>) -> Element<'a>,
-        memo: unsafe fn(&P, &P) -> bool,
+        memo: fn(&P, &P) -> bool,
         props: P,
     ) -> Self {
         Self {
@@ -37,18 +37,14 @@ impl<'a, P> VProps<'a, P> {
     }
 }
 
-unsafe impl<'a, P> AnyProps<'a> for VProps<'a, P> {
-    fn props_ptr(&self) -> *const () {
-        &self.props as *const _ as *const ()
-    }
-
+impl<'a, P> AnyProps<'a> for VProps<'a, P> {
     // Safety:
     // this will downcast the other ptr as our swallowed type!
     // you *must* make this check *before* calling this method
     // if your functions are not the same, then you will downcast a pointer into a different type (UB)
-    unsafe fn memoize(&self, other: &dyn AnyProps) -> bool {
-        let real_other: &P = &*(other.props_ptr() as *const _ as *const P);
-        let real_us: &P = &*(self.props_ptr() as *const _ as *const P);
+    fn memoize(&self, other: &dyn AnyProps) -> bool {
+        let real_us = &self.props;
+        let real_other = other.props().downcast_ref::<P>().unwrap();
         (self.memo)(real_us, real_other)
     }
 
@@ -72,5 +68,9 @@ unsafe impl<'a, P> AnyProps<'a> for VProps<'a, P> {
                 RenderReturn::default()
             }
         }
+    }
+
+    fn props(&self) -> &dyn Any {
+        &self.props
     }
 }

@@ -97,7 +97,7 @@ impl<'a> Properties for FragmentProps<'a> {
     fn builder() -> Self::Builder {
         FragmentBuilder(None)
     }
-    unsafe fn memoize(&self, _other: &Self) -> bool {
+    fn memoize(&self, _other: &Self) -> bool {
         false
     }
 }
