@@ -8,7 +8,7 @@ use dioxus_router::prelude::*;
 /// A builder for a fullstack app.
 pub struct LaunchBuilder<Props: Clone> {
     component: Component<Props>,
-    #[cfg(not(feature = "ssr"))]
+    #[cfg(any(feature = "web", feature = "desktop"))]
     props: Props,
     #[cfg(feature = "ssr")]
     server_fn_route: &'static str,
@@ -40,8 +40,8 @@ impl<Props: Clone + serde::Serialize + serde::de::DeserializeOwned + Send + Sync
     {
         Self {
             component,
-            #[cfg(not(feature = "ssr"))]
-            props,
+            #[cfg(any(feature = "web", feature = "desktop"))]
+            props: props.clone(),
             #[cfg(feature = "ssr")]
             server_fn_route: "",
             #[cfg(feature = "ssr")]

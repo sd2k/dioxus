@@ -68,8 +68,8 @@ pub mod prelude {
 }
 
 // Warn users about overlapping features
-#[cfg(all(feature = "ssr", feature = "web"))]
-compile_error!("The `ssr` feature (enabled by `warp`, `axum`, or `salvo`) and `web` feature are overlapping. Please choose one or the other.");
+// #[cfg(all(feature = "ssr", feature = "web"))]
+// compile_error!("The `ssr` feature (enabled by `warp`, `axum`, or `salvo`) and `web` feature are overlapping. Please choose one or the other.");
 
-#[cfg(all(feature = "ssr", feature = "desktop"))]
-compile_error!("The `ssr` feature (enabled by `warp`, `axum`, or `salvo`) and `desktop` feature are overlapping. Please choose one or the other.");
+// #[cfg(all(feature = "ssr", feature = "desktop"))]
+// compile_error!("The `ssr` feature (enabled by `warp`, `axum`, or `salvo`) and `desktop` feature are overlapping. Please choose one or the other.");
