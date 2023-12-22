@@ -305,9 +305,21 @@ where
                 .join("/");
             let route = format!("/{}", route);
             if path.is_dir() {
-                self = self.nest_service(&route, ServeDir::new(path));
+                self = self.nest_service(
+                    &route,
+                    ServeDir::new(path)
+                        .precompressed_br()
+                        .precompressed_deflate()
+                        .precompressed_gzip(),
+                );
             } else {
-                self = self.nest_service(&route, ServeFile::new(path));
+                self = self.nest_service(
+                    &route,
+                    ServeFile::new(path)
+                        .precompressed_br()
+                        .precompressed_deflate()
+                        .precompressed_gzip(),
+                );
             }
         }
 
